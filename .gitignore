@@ -1,0 +1,5 @@
+.idea
+target
+Cargo.lock
+**/src/api/*
+!**/src/api/mod.rs

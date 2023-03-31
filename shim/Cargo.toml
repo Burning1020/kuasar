@@ -1,0 +1,20 @@
+[package]
+edition = "2021"
+name = "containerd-shim-kuasar-v2"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+
+[dependencies]
+async-trait = "0.1"
+containerd-sandbox = {git = ""}
+containerd-shim = {git = "", features = ["sandbox"]}
+lazy_static = "1.4.0"
+log = "0.4"
+nix = "0.24.1"
+prost-types = "0.10.1"
+serde_json = "1.0.78"
+tokio = {version = "1", features = ["full"]}
+tonic = "0.7.2"
+tower = {version = "0.4"}
