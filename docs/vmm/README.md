@@ -29,10 +29,32 @@ The guest os can be either a busybox or any linux distributions, but make the su
 ## Building containerd
 git clone the codes of containerd fork version from kuasar repository. 
 ```bash
-git clone xxxx
+git clone https://github.com/kuasar-io/containerd.git
 cd containerd
 make bin/containerd
 install bin/containerd /usr/bin/containerd
+```
+
+## Config
+Config cloud-hypervisor vmm-sandboxer:
+
+```toml
+[hypervisor]
+path = "/usr/local/bin/cloud-hypervisor"
+vcpus = 1
+memory_in_mb = 2048
+kernel_path = "/var/lib/kuasar/vmlinux.bin"
+image_path = "/var/lib/kuasar/kuasar.img"
+initrd_path = ""
+kernel_params = ""
+hugepages = false
+entropy_source = "/dev/urandom"
+debug = true
+[hypervisor.virtiofsd]
+path = "/usr/local/bin/virtiofsd"
+log_level = "info"
+cache = "never"
+thread_pool_size = 4
 ```
 
 ## Running with containerd
@@ -44,11 +66,17 @@ cp target/x86_64-unknown-linux-musl/release/vmm-sandboxer /usr/local/bin/
 add a sandboxer config in containerd config
 ```toml
 [proxy_plugins]
-  [proxy_plugins.kuasar]
+  [proxy_plugins.vmm]
     type = "sandbox"
     address = "/run/vmm-sandboxer.sock"
+
+[plugins.cri.containerd.runtimes.vmm]
+  runtime_type = "io.containerd.kuasar.v1"
+  sandboxer = "vmm"
+  io_type = "hvsock"
 ```
 
+## Start Container
 create a file named pod.json with content:
 ```json
 {
@@ -86,9 +114,7 @@ create a file named container.json with content:
 
 create pod and container with crictl
 ```shell
-podid=`crictl runp --runtime=kuasar pod.json`
-containerid=`crictl create --no-pull $podid container.json pod.json`
-crictl start $containerid
+crictl run --runtime=vmm --no-pull container.json pod.json
 ```
 
 now container is running and you can access it with `crictl exec` command

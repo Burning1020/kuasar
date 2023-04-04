@@ -60,7 +60,7 @@ ENABLE_CRI_SANDBOXES=1 ./contained -l=info
 
 ### 3. Running the tests
 
-There are a bunch of scripts in `./scripts`. They assume you are in the `./scripts` directory when you run them.
+There are a bunch of scripts in `./scripts`. They assume you are in the `./scripts` directory when you run them.
 
 ```bash
 cd ./scripts
@@ -86,7 +86,7 @@ cd ./scripts
   sh kuasar-mem-test.sh
   ```
 
-        Measure three times, record the result and take the average value.
+  Measure three times, record the result and take the average value.
 
 ### 4. Generate Graph
 

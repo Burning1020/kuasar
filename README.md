@@ -1,150 +1,83 @@
 <img height="279" src="docs/images/logo.png" width="500"/>
 
-# What is Kuasar?
+Kuasar, written in Rust, is a high-performance container runtime working to run containers based on multiple sandboxing techniques including microVM, app kernel and webassembly, etc.
 
-Kuasar is a collection of container sandboxers, written in rust, that provides various levels of security isolation for 
-container. A `sandboxer` is an external plugin of containerd, based on the new sandbox plugin mechanism, that provides 
-APIs of sandbox lifecycle management, such as `Create`, `Start` `Stop` and `Shutdown`, and also operations related with 
-containers, such as `Prepare`, `Purge`. Each sandboxer implementation has its own method to isolate the containers
-inside the sandbox. Three secure sandboxer implementations are included in Kuasar organizations recently, `vmm`, `quark`
-and `wasi`.
-
-`vmm` and `quark` sandboxes isolate containers based on the kvm hypervisor, `vmm` provides complete VMs and Linux
-kernels based on open-source virtualization components, such as qemu and cloud-hypervisor. `quark` will launch a kvm 
-virtual machine and a guest kernel by itself, without any application level hypervisor and Linux, therefore, more 
-aggressive optimization can be made to speed up the startup processing, to reduce the memory overhead, and to speed up 
-IO and network. The tests show its performance can be comparable to that of runc, or even bare metal.
-
-`wasi` sandbox isolates containers in WebAssembly runtime(wasmedge).
 
 # Why Kuasar?
 
-"Sandbox" becomes the first class citizen in containerd after the sandbox plugin mechanism was introduced to containerd, 
-a sandbox is an isolated environment for running multiple containers. We can implement a variety of "sandboxer" based on 
-the sandbox API with different kinds of isolation technique such as hypervisor, webassembly or user mode kernel. 
-The advantage brought by the introduction of sandbox is that the shim process can be removed as it is not necessary.
+After the introduction of the sandbox plugin mechanism, "sandbox" has become the first-class citizen in containerd. A sandbox is an isolated environment used for running multiple containers, with these different types of isolation techniques available,  a variety of "sandboxer" can be implemented based on sandbox API in containerd. This change has allowed for the removal of the shim process, which is no longer necessary.
 
-Kuasar provides some sandboxer implementations written in rust. rust is a language of excellent performance while having
-strict memory security guarantees. The three sandboxer, `vmm`, `quark` and `wasi`, are all proved to be secure isolation 
-techniques, which can be running in the multi-tenant environment. `vmm` provides a relatively completed Linux 
-environment, `quark` focuses on its startup time, memory overhead and IO performance, `wasi` is extremely lightweight 
-but maybe not that compatible with processes running in Unix-like OS. Applications can choose their appropriate
-sandboxer based on their requirement.
+Kuasar offers several sandboxer implementations. Currently there are three available sandboxers, `vmm`, `quark` and `wasm`, that have all been proven to be secure isolation techniques suitable for use in a multi-tenant environment. Besides, `runc` sandboxer implementation is already on the schedule. Kuasar makes it possiable for applications to run under the most appropriate sandboxer based on their specific requirements.
+
+Compared with traditional container runtimes, Kuasar has the following advantages:
+
+- **Efficient Sandbox API Server**:  
+  + Provide a more developer-friendly framework by Sandbox API.
+  + Reduce management resource overhead due to the removal of the shim process, please refer to [Performance](#Performance) .
+- **Multi-Sandbox Colocation**: Kuasar provides secure and isolated colocation solutions, allows to run different runtimes in the same node, which will improve node resource utilization.
+- **Open Ecosystem**: Kuasar support mainstream sandboxes, always stay unbiased and seamless integration.
 
 # Kuasar Architecture
 
-For the vmm based sandbox, the introduction of sandboxer has removed the shim process on host, making one process for 
-one pod, which makes the architecture cleaner, and easier to maintain.
+![](docs/images/3.png)
+
+Kuasar comprises a collection of container sandboxers which are external plugins of containerd built on the new sandbox plugin mechanism. These sandboxers provide
+APIs for managing the sandbox lifecycle, such as `Create`, `Start` `Stop` and `Shutdown`. They also handle operations related to containers, such as `Prepare`, `Purge`. Each implementation of the sandboxers in Kuasar utilizes its own isolation techniques for the containers within the sandbox. Recently, Kuasar has included three secure sandboxer implementations - `vmm`, `quark` and `wasm`. A discussion about the sandboxer mechanism in containerd has been raised in [Github issue](https://github.com/containerd/containerd/issues/7739), with a community meeting recoding and slide attached in this [comment](https://github.com/containerd/containerd/issues/7739#issuecomment-1384797825).
+
+`vmm` and `quark` sandboxes isolate containers based on the kvm hypervisor. `vmm` provides complete VMs and Linux kernels based on open-source virtualization components such as Cloud Hypervisor and QEMU. `quark` launches a KVM virtual machine and a guest kernel without any application level hypervisor and Linux, allowing for more aggressive optimization to speed up startup processing, reduce memory overhead, and improve IO and network performance. Tests have shown that its performance can be comparable to that of runc or even bare metal.
+
+The `wasm` sandbox in Kuasar isolates containers within the WebAssembly runtime (wasmedge).
+
+## MicroVM Sandboxer
+
+The vmm-based sandbox in Kuasar eliminates the need for the shim process on the host, resulting in one process per pod and a cleaner, more manageable architecture.
 ![vmm](docs/images/vmm-arch.png)
 
-[Quark](https://github.com/QuarkContainer/Quark) has its own hypervisor called `QVisor` and kernel called `QKernel`, 
-with rewriting of these components it can achieve a much better performance compared with that of a common hypervisor 
-and a common linux kernel.
+## App Kernel Sandboxer
 
-Wasi sandboxer runs containers in a WebAssembly runtime, currently [wasmedge](https://github.com/WasmEdge/WasmEdge) supported. 
-Everytime when containerd has to start a container in sandbox, the wasi-task-server will fork a new process, start a new 
-wasmedge runtime and run wasm codes inside it. All containers in a same pod will share the same ns/cgroup resources with 
-the wasi-task-server process.
-![wasi](docs/images/wasi.png)
+Quark is a novel application kernel sandbox that utilizes its own hypervisor called `QVisor` and a custom kernel called `QKernel`. With customizations made to these components, Quark can achieve significantly better performance compared to traditional hypervisors. For those interested, the source code for Quark can be found on its [GitHub page](https://github.com/QuarkContainer/Quark).
 
-Besides these three sandboxers, Kuasar is also a developing platform, that more sandboxers can be built on.
+The quark sandboxer start a  process with `quark-task` and an app kernel named `Qkernel`. Whenever containerd needs to start a container in the sandbox, the `quark-task` will call `Qkernel` to start a new container in it. All containers within the same pod will lie in the same process.
 
-# Sandboxer in containerd
+![quark](docs/images/quark.png)
 
-There is a containered issue talking about sandboxer mechanism: https://github.com/containerd/containerd/issues/7739.
+## Wasm Sandboxer
 
-A community recoding and a slide were attached in this [comment](https://github.com/containerd/containerd/issues/7739#issuecomment-1384797825).
+The Wasm sandboxer executes containers within a WebAssembly runtime, currently with support for [wasmedge](https://github.com/WasmEdge/WasmEdge). Whenever containerd needs to start a container in the sandbox, the `wasm-task` will fork a new process, start a new wasmedge runtime, and run the Wasm code inside it. All containers within the same pod will share the same ns/cgroup resources with the `wasm-task` process.
+![wasm](docs/images/wasm.png)
+
+
+
+In addition to these three sandboxers, Kuasar is also a platform under active development, which means that more sandboxers can be built on top of it.
+
+# Performance
+
+Two performance metrics have been established: E2E batch containers startup time and management process memory consumption. Detailed test scripts, test data, and results can be found in [benchmark test](tests/benchmark/Benchmark.md), which demonstrates that Kuasar has a significant advantage over open-source [Kata-containers](https://github.com/kata-containers/kata-containers) in terms of both startup speed and memory consumption.
 
 # Quick Start
 
-## prerequisites
+## Prerequisites
 
 ### 1. OS
-The lowest linux distro versions that kuasar supports:
-1. Ubuntu 22.04
-2. CentOS 8
+The lowest versions of Linux distributions that Kuasar supports are:
++ Ubuntu 22.04
++ CentOS 8
 
-Quark should run on linux kernel with version higher than 5.15.
+*Note: Quark should run on linux kernel >= 5.15.*
 
-### 2. rust
-rust 1.67 or higher version is required to compile kuasar sandboxers
+### 2. Sandbox
 
-To install rust:
-```
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-source "$HOME/.cargo/env"
-```
+ + Cloud Hypervisor: To launch a vmm based sandbox, a hypervisor must be installed on the host. While vmm-sandboxer supports both QEMU and Cloud Hypervisor as hypervisors, we recommend [installing Cloud Hypervisor](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/main/docs/building.md) as the default option.
++ Quark: See [installation](docs/quark/README.md).
++ WasmEdge: If you want to use wasm-sandboxer to start WebAssembly sandboxes, you need to install wasmedge. To install wasmedge, please refer to [install.html](https://wasmedge.org/book/en/quick_start/install.html).
+
 ### 3. containerd
-kuasar sandboxers are all external plugins of containerd, containerd and its CRI plugin is required to manage the 
-sandboxes and containers.
 
-To install containerd, please refer to https://github.com/containerd/containerd/blob/main/docs/getting-started.md.
+Kuasar sandboxers are external plugins of containerd, so both containerd and its CRI plugin are required to manage the sandboxes and containers.
 
-### 4. cloud-hypervisor
-A hypervisor should be installed on host if you want to launch a vmm based sandbox. Although vmm-sandboxer supports 
-both qemu and cloud-hypervisor as its hypervisor. we suggest to install cloud-hypervisor as default.
+We offer two ways to interact Kuasar with containerd:
 
-To install cloud-hypervisor, please refer to https://github.com/cloud-hypervisor/cloud-hypervisor/blob/main/docs/building.md
-
-### 5. Quark
-If you want to try the Quark sandboxer, the QuarkContainer should be installed.
-To build and install Quark, please refer to https://github.com/QuarkContainer/Quark
-
-After installation, we should change the `Sandboxed` config to `true` in the `/etc/quark/config.json`:
-
-```json
-{
-  "DebugLevel"    : "Error",
-  "KernelMemSize" : 24,
-  "LogType"       : "Sync",
-  "LogLevel"      : "Simple",
-  "UringIO"       : true,
-  "UringBuf"      : true,
-  "UringFixedFile": false,
-  "EnableAIO"     : true,
-  "PrintException": false,
-  "KernelPagetable": false,
-  "PerfDebug"     : false,
-  "UringStatx"    : false,
-  "FileBufWrite"  : true,
-  "MmapRead"      : false,
-  "AsyncAccept"   : true,
-  "EnableRDMA"    : false,
-  "RDMAPort"      : 1,
-  "PerSandboxLog" : false,
-  "ReserveCpuCount": 1,
-  "ShimMode"      : false,
-  "EnableInotify" : true,
-  "ReaddirCache"  : true,
-  "HiberODirect"  : true,
-  "DisableCgroup" : true,
-  "CopyDataWithPf": true,
-  "TlbShootdownWait": true,
-  "Sandboxed": true
-}
-```
-
-Make sure the `ShimMode` is false, and `Sandboxed` is true in the config file.
-
-### 6. wasmedge
-Wasi-sandboxer supports wasmedge to start WebAssembly sandboxes currently, wasmedge should be installed if 
-wasi-sandboxer is needed.
-
-To install wasmedge, please refer to https://wasmedge.org/book/en/quick_start/install.html
-
-## build from source
-
-```
-cd kuasar
-make all
-make install
-```
-
-## start kuasar sandboxers
-
-
-## configure containerd
-After installed kuasar, we need to configure containerd to start containers by kuasar.
++ If the full Kuasar experience is considerated, please install [our containerd under kuasar-io organization](docs/vmm/README.md#Building containerd) and configure containerd using the following configuration.
 
 ```toml
 [proxy_plugins]
@@ -154,26 +87,56 @@ After installed kuasar, we need to configure containerd to start containers by k
   [proxy_plugins.quark]
     type = "sandbox"
     address = "/run/quark-sandboxer.sock"
-  [proxy_plugins.wasi]
+  [proxy_plugins.wasm]
     type = "sandbox"
-    address = "/run/wasi-sandboxer.sock"
+    address = "/run/wasm-sandboxer.sock"
 
 [plugins.cri.containerd.runtimes.vmm]
   runtime_type = "io.containerd.kuasar.v1"
   sandboxer = "vmm"
   io_type = "hvsock"
-[plugins.cri.containerd.runtimes.wasi]
-  runtime_type = "io.containerd.wasi.v1"
-  sandboxer = "wasi"
+[plugins.cri.containerd.runtimes.wasm]
+  runtime_type = "io.containerd.wasm.v1"
+  sandboxer = "wasm"
 [plugins.cri.containerd.runtimes.quark]
   runtime_type = "io.containerd.quark.v1"
   sandboxer = "quark"
 ```
 
-Three proxy plugins and three container runtimes are added to the config. Then run restart container by 
-`systemctl restart containerd`.
++ If compatibility is a concern, you need to install official containerd v1.7.0 and use [kuasar-shim](shim) for request forwarding,  see [here](shim/README.md).
 
-## Contact
+Note: Due to containerd Sandbox API design, containerd should start with an enviroment variable `ENABLE_CRI_SANDBOXES=1`.
+
+## Build Kuasar from source
+
+Rust 1.67 or higher version is required to compile Kuasar sandboxers.
+
+```shell
+git clone https://github.com/kuasar-io/kuasar.git
+cd kuasar
+make all
+make install
+```
+
+## Start Kuasar
+
+Launch the sandboxers by the following commands:
+
+`vmm-sandboxer --listen /run/vmm-sandboxer.sock --dir /run/kuasar-vmm`
+
+`quark-sandboxer --listen /run/quark-sandboxer.sock --dir /run/kuasar-quark`
+
+`wasm-sandboxer --listen /run/wasm-sandboxer.sock --dir /run/kuasar-wasm`
+
+## Start Container
+
+Container can be started by `crictl `, `ctr` or CRI rpc call to containerd.
+
++ Start vmm container:  [](docs/vmm/README.md#Start Container)
++ Start quark container:  [](docs/quark/README.md#Start Container)
++ Start wasm container:  [](docs/wasm/README.md#Start Container)
+
+# Contact
 
 If you need support, start with the [troubleshooting guide](), and work your way through the process that we've outlined.
 
@@ -183,25 +146,11 @@ If you have questions, feel free to reach out to us in the following ways:
 - [slack]()
 - [twitter]()
 
-## Contributing
+# Contributing
 
-If you're interested in being a contributor and want to get involved in developing the kuasar code, please see
-[CONTRIBUTING](CONTRIBUTING.md) for details on submitting patches and the contribution workflow.
+If you're interested in being a contributor and want to get involved in developing the Kuasar code, please see [CONTRIBUTING](CONTRIBUTING.md) for details on submitting patches and the contribution workflow.
 
-## Security
-
-### Security Audit
-TODO
-
-### Reporting security vulnerabilities
-
-We do encourage security researchers, industry organizations and users to proactively report suspected vulnerabilities
-to our security team, the team will help diagnose the severity of the issue and determine how to address the issue as 
-soon as possible.
-
-For further details please see [Security Policy](SECURITY.md) for our security process and how to report vulnerabilities.
-
-## License
+# License
 
 Kuasar is under the Apache 2.0 license. See the [LICENSE](LICENSE) file for details.
 

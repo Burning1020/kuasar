@@ -1,9 +1,9 @@
 HYPERVISOR ?= cloud_hypervisor
 GUESTOS_IMAGE ?= centos
-WASI_RUNTIME ?= wasmedge
+WASM_RUNTIME ?= wasmedge
 KERNEL_VERSION ?= 6.2
 
-all: vmm quark wasi
+all: vmm quark wasm
 
 bin/vmm-sandboxer:
 	@cd vmm && cargo build --release --features=${HYPERVISOR}
@@ -21,22 +21,22 @@ bin/kuasar.img:
 	@bash -x vmm/scripts/image/${GUESTOS_IMAGE}/build.sh
 	@mkdir -p bin && cp /tmp/kuasar.img bin/kuasar.img && rm /tmp/kuasar.img
 
-bin/wasi-sandboxer:
-	@cd wasi && cargo build --release --features=${WASI_RUNTIME}
-	@mkdir -p bin && cp wasi/target/release/wasi-sandboxer bin/wasi-sandboxer
+bin/wasm-sandboxer:
+	@cd wasm && cargo build --release --features=${WASM_RUNTIME}
+	@mkdir -p bin && cp wasm/target/release/wasm-sandboxer bin/wasm-sandboxer
 
 bin/quark-sandboxer:
 	@cd quark && cargo build --release
 	@mkdir -p bin && cp quark/target/release/quark-sandboxer bin/quark-sandboxer
 
 vmm: bin/vmm-sandboxer bin/kuasar.img bin/vmlinux.bin
-wasi: bin/wasi-sandboxer
+wasm: bin/wasm-sandboxer
 quark: bin/quark-sandboxer
 
 clean:
 	@rm -rf bin
 	@cd vmm && cargo clean
-	@cd wasi && cargo clean
+	@cd wasm && cargo clean
 	@cd quark && cargo clean
 
 install: all
@@ -45,11 +45,11 @@ install: all
 	@install -p -m 644 bin/kuasar.img /var/lib/kuasar/kuasar.img
 	@install -p -m 644 bin/vmlinux.bin /var/lib/kuasar/vmlinux.bin
 	@install -p -m 644 vmm/sandbox/config_clh.toml /var/lib/kuasar/config_clh.toml
-	@install -p -m 755 bin/wasi-sandboxer /usr/local/bin/wasi-sandboxer
+	@install -p -m 755 bin/wasm-sandboxer /usr/local/bin/wasm-sandboxer
 	@install -p -m 755 bin/quark-sandboxer /usr/local/bin/quark-sandboxer
-	@install -p -m 755 bin/wasi-sandbo /usr/local/bin/wasi-sandboxer
-	@install -p -m 755 bin/wasi-sandboxer /usr/local/bin/wasi-sandboxer
+	@install -p -m 755 bin/wasm-sandbo /usr/local/bin/wasm-sandboxer
+	@install -p -m 755 bin/wasm-sandboxer /usr/local/bin/wasm-sandboxer
 
 
-.PHONY: vmm wasi quark clean all install
+.PHONY: vmm wasm quark clean all install
 

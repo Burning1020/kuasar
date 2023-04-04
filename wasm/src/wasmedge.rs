@@ -221,13 +221,13 @@ impl ProcessLifecycle<InitProcess> for WasmEdgeInitLifecycle {
         _resources: &oci_spec::runtime::LinuxResources,
     ) -> containerd_shim::Result<()> {
         Err(Error::Unimplemented(
-            "exec not supported for wasi containers".to_string(),
+            "exec not supported for wasm containers".to_string(),
         ))
     }
 
     async fn stats(&self, _p: &InitProcess) -> containerd_shim::Result<Metrics> {
         Err(Error::Unimplemented(
-            "exec not supported for wasi containers".to_string(),
+            "exec not supported for wasm containers".to_string(),
         ))
     }
 
@@ -242,7 +242,7 @@ impl ProcessLifecycle<InitProcess> for WasmEdgeInitLifecycle {
 impl ProcessLifecycle<ExecProcess> for WasmEdgeExecLifecycle {
     async fn start(&self, _p: &mut ExecProcess) -> containerd_shim::Result<()> {
         Err(Error::Unimplemented(
-            "exec not supported for wasi containers".to_string(),
+            "exec not supported for wasm containers".to_string(),
         ))
     }
 
@@ -253,13 +253,13 @@ impl ProcessLifecycle<ExecProcess> for WasmEdgeExecLifecycle {
         _all: bool,
     ) -> containerd_shim::Result<()> {
         Err(Error::Unimplemented(
-            "exec not supported for wasi containers".to_string(),
+            "exec not supported for wasm containers".to_string(),
         ))
     }
 
     async fn delete(&self, _p: &mut ExecProcess) -> containerd_shim::Result<()> {
         Err(Error::Unimplemented(
-            "exec not supported for wasi containers".to_string(),
+            "exec not supported for wasm containers".to_string(),
         ))
     }
 
@@ -269,19 +269,19 @@ impl ProcessLifecycle<ExecProcess> for WasmEdgeExecLifecycle {
         _resources: &oci_spec::runtime::LinuxResources,
     ) -> containerd_shim::Result<()> {
         Err(Error::Unimplemented(
-            "exec not supported for wasi containers".to_string(),
+            "exec not supported for wasm containers".to_string(),
         ))
     }
 
     async fn stats(&self, _p: &ExecProcess) -> containerd_shim::Result<Metrics> {
         Err(Error::Unimplemented(
-            "exec not supported for wasi containers".to_string(),
+            "exec not supported for wasm containers".to_string(),
         ))
     }
 
     async fn ps(&self, _p: &ExecProcess) -> containerd_shim::Result<Vec<ProcessInfo>> {
         Err(Error::Unimplemented(
-            "exec not supported for wasi containers".to_string(),
+            "exec not supported for wasm containers".to_string(),
         ))
     }
 }
@@ -290,7 +290,7 @@ impl ProcessLifecycle<ExecProcess> for WasmEdgeExecLifecycle {
 impl ProcessFactory<ExecProcess> for ExecFactory {
     async fn create(&self, _req: &ExecProcessRequest) -> containerd_shim::Result<ExecProcess> {
         Err(Error::Unimplemented(
-            "exec not supported for wasi containers".to_string(),
+            "exec not supported for wasm containers".to_string(),
         ))
     }
 }

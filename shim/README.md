@@ -9,7 +9,7 @@ up containerd v1.7.0 and kuasar sandboxer, so maybe it will be **deprecated** in
 
 # Usage
 This directory supply two shims, `containerd-shim-kuasar-vmm-v2` and `containerd-shim-kuasar-wasm-v2`.
-The former one will talk to vmm-sandboxer and the later one will talk to wasi-sandboxer.
+The former one will talk to vmm-sandboxer and the later one will talk to wasm-sandboxer.
 
 ## Build
 You need build it from source before use it:

@@ -51,7 +51,7 @@ use crate::{
     service::KuasarServer,
 };
 
-pub(crate) const KUASAR_SOCKET_PATH: &str = "/run/kuasar-sandboxer.sock";
+pub(crate) const KUASAR_SOCKET_PATH: &str = "/run/vmm-sandboxer.sock";
 pub(crate) const CRI_SANDBOX_ROOT_PATH: &str =
     "/var/lib/containerd/io.containerd.grpc.v1.cri/sandboxes/";
 pub(crate) const CRI_SANDBOX_STATE_PATH: &str =

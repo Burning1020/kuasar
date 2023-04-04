@@ -1,0 +1,67 @@
+Index: crates/sandbox/src/args.rs
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/crates/sandbox/src/args.rs b/crates/sandbox/src/args.rs
+--- a/crates/sandbox/src/args.rs	(revision e97022dc894cf332485b523d7a2c33bd02484adf)
++++ b/crates/sandbox/src/args.rs	(revision 34d1f22a1f44dfed5a786b3a08df06c270c20a72)
+@@ -1,6 +1,7 @@
+-use crate::error::{Error, Result};
+ use std::ffi::OsStr;
+ 
++use crate::error::{Error, Result};
++
+ #[derive(Debug, Default)]
+ pub struct Flags {
+     pub listen: String,
+@@ -20,6 +21,11 @@
+         return Err(Error::InvalidArgument(String::from(
+             "--listen cannot be empty, should be a unix domain socket",
+         )));
++    }
++    if flags.dir.is_empty() {
++        return Err(Error::InvalidArgument(String::from(
++            "--dir cannot be empty, should be a directory",
++        )));
+     }
+     Ok(flags)
+ }
+Index: crates/sandbox/src/lib.rs
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/crates/sandbox/src/lib.rs b/crates/sandbox/src/lib.rs
+--- a/crates/sandbox/src/lib.rs	(revision e97022dc894cf332485b523d7a2c33bd02484adf)
++++ b/crates/sandbox/src/lib.rs	(revision 34d1f22a1f44dfed5a786b3a08df06c270c20a72)
+@@ -10,6 +10,8 @@
+ use tokio::sync::Mutex;
+ use tonic::transport::Server;
+ 
++pub use cri::api::v1::PodSandboxConfig;
++
+ use crate::api::sandbox::v1::controller_server::ControllerServer;
+ use crate::data::{ContainerData, SandboxData};
+ use crate::error::Result;
+@@ -47,8 +49,6 @@
+     tonic::include_proto!("containerd.types");
+ }
+ 
+-pub use cri::api::v1::PodSandboxConfig;
+-
+ #[derive(Clone, Debug)]
+ pub struct SandboxOption {
+     pub base_dir: String,
+@@ -130,6 +130,11 @@
+     if Path::new(&*flags.listen).exists() {
+         tokio::fs::remove_file(&*flags.listen).await.unwrap();
+     }
++
++    if !Path::new(&*flags.dir).exists() {
++        tokio::fs::create_dir_all(&*flags.dir).await.unwrap();
++    }
++
+     let incoming = {
+         let uds = UnixListener::bind(&*flags.listen).unwrap();
+         async_stream::stream! {

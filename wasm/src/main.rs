@@ -25,7 +25,7 @@ use nix::sys::wait::{WaitPidFlag, WaitStatus};
 use nix::unistd::Pid;
 use signal_hook_tokio::Signals;
 
-use crate::sandbox::WasiSandboxer;
+use crate::sandbox::WasmSandboxer;
 
 mod sandbox;
 #[cfg(feature = "wasmedge")]
@@ -43,8 +43,8 @@ async fn main() -> anyhow::Result<()> {
         handle_signals(signals).await;
     });
 
-    let sandboxer = WasiSandboxer::default();
-    containerd_sandbox::run("kuasar-wasi-sandboxer", sandboxer)
+    let sandboxer = WasmSandboxer::default();
+    containerd_sandbox::run("kuasar-wasm-sandboxer", sandboxer)
         .await
         .unwrap();
     Ok(())

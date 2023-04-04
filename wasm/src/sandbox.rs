@@ -39,31 +39,31 @@ use tokio::sync::{Mutex, RwLock};
 use crate::wasmedge::{process_exits, WasmEdgeContainer, WasmEdgeContainerFactory};
 
 #[derive(Default)]
-pub struct WasiSandboxer {
+pub struct WasmSandboxer {
     #[allow(clippy::type_complexity)]
-    pub(crate) sandboxes: Arc<RwLock<HashMap<String, Arc<Mutex<WasiSandbox>>>>>,
+    pub(crate) sandboxes: Arc<RwLock<HashMap<String, Arc<Mutex<WasmSandbox>>>>>,
 }
 
-pub struct WasiSandbox {
+pub struct WasmSandbox {
     pub(crate) id: String,
     pub(crate) base_dir: String,
     pub(crate) data: SandboxData,
     pub(crate) status: SandboxStatus,
     pub(crate) exit_signal: Arc<ExitSignal>,
-    pub(crate) containers: HashMap<String, WasiContainer>,
+    pub(crate) containers: HashMap<String, WasmContainer>,
     pub(crate) server: Option<Server>,
 }
 
-pub struct WasiContainer {
+pub struct WasmContainer {
     pub(crate) data: ContainerData,
 }
 
 #[async_trait]
-impl Sandboxer for WasiSandboxer {
-    type Sandbox = WasiSandbox;
+impl Sandboxer for WasmSandboxer {
+    type Sandbox = WasmSandbox;
 
     async fn create(&self, id: &str, s: SandboxOption) -> Result<()> {
-        let sandbox = WasiSandbox {
+        let sandbox = WasmSandbox {
             id: id.to_string(),
             base_dir: s.base_dir,
             data: s.sandbox,
@@ -116,7 +116,7 @@ impl Sandboxer for WasiSandboxer {
     }
 }
 
-impl WasiSandbox {
+impl WasmSandbox {
     async fn stop(&mut self) -> Result<()> {
         if let Some(mut server) = self.server.take() {
             server
@@ -175,8 +175,8 @@ impl WasiSandbox {
 }
 
 #[async_trait]
-impl Sandbox for WasiSandbox {
-    type Container = WasiContainer;
+impl Sandbox for WasmSandbox {
+    type Container = WasmContainer;
 
     fn status(&self) -> Result<SandboxStatus> {
         Ok(self.status.clone())
@@ -194,7 +194,7 @@ impl Sandbox for WasiSandbox {
     }
 
     async fn append_container(&mut self, id: &str, option: ContainerOption) -> Result<()> {
-        let container = WasiContainer {
+        let container = WasmContainer {
             data: option.container,
         };
         self.containers.insert(id.to_string(), container);
@@ -219,7 +219,7 @@ impl Sandbox for WasiSandbox {
     }
 }
 
-impl Container for WasiContainer {
+impl Container for WasmContainer {
     fn get_data(&self) -> Result<ContainerData> {
         Ok(self.data.clone())
     }

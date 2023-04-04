@@ -6,7 +6,7 @@ kernel_path = "/var/lib/kuasar/vmlinux.bin"
 image_path = "/var/lib/kuasar/kuasar.img"
 initrd_path = ""
 kernel_params = ""
-hugepages = true
+hugepages = false
 entropy_source = "/dev/urandom"
 debug = true
 [hypervisor.virtiofsd]
@@ -14,4 +14,3 @@ path = "/usr/local/bin/virtiofsd"
 log_level = "info"
 cache = "never"
 thread_pool_size = 4
-
