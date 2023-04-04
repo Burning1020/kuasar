@@ -19,7 +19,7 @@ Compared with traditional container runtimes, Kuasar has the following advantage
 
 # Kuasar Architecture
 
-![](docs/images/3.png)
+![](docs/images/arch.png)
 
 Kuasar comprises a collection of container sandboxers which are external plugins of containerd built on the new sandbox plugin mechanism. These sandboxers provide
 APIs for managing the sandbox lifecycle, such as `Create`, `Start` `Stop` and `Shutdown`. They also handle operations related to containers, such as `Prepare`, `Purge`. Each implementation of the sandboxers in Kuasar utilizes its own isolation techniques for the containers within the sandbox. Recently, Kuasar has included three secure sandboxer implementations - `vmm`, `quark` and `wasm`. A discussion about the sandboxer mechanism in containerd has been raised in [Github issue](https://github.com/containerd/containerd/issues/7739), with a community meeting recoding and slide attached in this [comment](https://github.com/containerd/containerd/issues/7739#issuecomment-1384797825).
