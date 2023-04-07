@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use vmm_common::api::sandbox::{IPAddress, IPFamily, Interface, Route};
 use protobuf::EnumOrUnknown;
+use vmm_common::api::sandbox::{IPAddress, IPFamily, Interface, Route};
 
 use crate::network::{IpNet, NetworkInterface};
 

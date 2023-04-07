@@ -14,31 +14,36 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::collections::HashMap;
-use std::fs::read_to_string;
-use std::path::Path;
-use std::sync::Arc;
+use std::{collections::HashMap, fs::read_to_string, path::Path, sync::Arc};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
 use containerd_sandbox::{
-    Container, ContainerOption, Sandbox, Sandboxer, SandboxOption, SandboxStatus,
+    data::{ContainerData, SandboxData},
+    error::{Error, Result},
+    signal::ExitSignal,
+    spec::{
+        JsonSpec, Linux, LinuxCPU, LinuxHugepageLimit, LinuxMemory, LinuxNamespace, LinuxResources,
+        Process, Root,
+    },
+    Container, ContainerOption, Sandbox, SandboxOption, SandboxStatus, Sandboxer,
 };
-use containerd_sandbox::data::{ContainerData, SandboxData};
-use containerd_sandbox::error::{Error, Result};
-use containerd_sandbox::signal::ExitSignal;
-use containerd_sandbox::spec::{JsonSpec, Linux, LinuxCPU, LinuxHugepageLimit, LinuxMemory, LinuxNamespace, LinuxResources, Process, Root};
-use nix::errno::Errno;
-use nix::mount::umount;
-use nix::sys::signal::kill;
-use nix::sys::signal::Signal;
-use nix::unistd::Pid;
+use nix::{
+    errno::Errno,
+    mount::umount,
+    sys::signal::{kill, Signal},
+    unistd::Pid,
+};
 use prost_types::Any;
-use tokio::fs::{create_dir_all, remove_dir_all};
-use tokio::sync::{Mutex, RwLock};
+use tokio::{
+    fs::{create_dir_all, remove_dir_all},
+    sync::{Mutex, RwLock},
+};
 
-use crate::mount::bind_mount;
-use crate::utils::{cleanup_mounts, mount_rootfs, write_file_atomic};
+use crate::{
+    mount::bind_mount,
+    utils::{cleanup_mounts, mount_rootfs, write_file_atomic},
+};
 
 pub struct QuarkSandboxer {
     #[allow(clippy::type_complexity)]
@@ -142,10 +147,7 @@ impl Sandboxer for QuarkSandboxer {
         Ok(())
     }
 
-    async fn sandbox(
-        &self,
-        id: &str,
-    ) -> Result<Arc<Mutex<Self::Sandbox>>> {
+    async fn sandbox(&self, id: &str) -> Result<Arc<Mutex<Self::Sandbox>>> {
         return Ok(self
             .sandboxes
             .read()
@@ -214,11 +216,7 @@ impl Sandbox for QuarkSandbox {
             .ok_or(Error::NotFound(format!("no container id {} found", id)));
     }
 
-    async fn append_container(
-        &mut self,
-        id: &str,
-        option: ContainerOption,
-    ) -> Result<()> {
+    async fn append_container(&mut self, id: &str, option: ContainerOption) -> Result<()> {
         let bundle = self.get_container_bundle(id);
         let mut data = option.container;
         create_dir_all(&bundle)
@@ -262,11 +260,7 @@ impl Sandbox for QuarkSandbox {
         Ok(())
     }
 
-    async fn update_container(
-        &mut self,
-        id: &str,
-        option: ContainerOption,
-    ) -> Result<()> {
+    async fn update_container(&mut self, id: &str, option: ContainerOption) -> Result<()> {
         let removed_process_ids = {
             let container = self.container(id).await?;
 
@@ -409,10 +403,7 @@ impl QuarkSandbox {
         Ok(())
     }
 
-    fn container_mut(
-        &mut self,
-        id: &str,
-    ) -> Result<&mut <Self as Sandbox>::Container> {
+    fn container_mut(&mut self, id: &str) -> Result<&mut <Self as Sandbox>::Container> {
         return self
             .containers
             .get_mut(id)
@@ -430,7 +421,10 @@ impl Container for QuarkContainer {
 impl QuarkSandboxer {
     fn create_spec(&self, data: &SandboxData) -> Result<JsonSpec> {
         let mut spec = JsonSpec::default();
-        let config = data.config.as_ref().ok_or(anyhow!("no PodSandboxConfig in request"))?;
+        let config = data
+            .config
+            .as_ref()
+            .ok_or(anyhow!("no PodSandboxConfig in request"))?;
 
         // construct Linux Configs from PodSandboxConfig
         let mut linux = Linux {
@@ -510,7 +504,10 @@ impl QuarkSandboxer {
         }
 
         if !data.netns.is_empty() {
-            linux.namespaces.push(LinuxNamespace { r#type: "network".to_string(), path: data.netns.to_string() });
+            linux.namespaces.push(LinuxNamespace {
+                r#type: "network".to_string(),
+                path: data.netns.to_string(),
+            });
         }
         spec.linux = Some(linux);
 
@@ -518,7 +515,10 @@ impl QuarkSandboxer {
         let process = Process::new();
         spec.process = Some(process);
         // TODO add root path
-        let root = Root { path: "rootfs".to_string(), readonly: false };
+        let root = Root {
+            path: "rootfs".to_string(),
+            readonly: false,
+        };
         spec.root = Some(root);
         Ok(spec)
     }

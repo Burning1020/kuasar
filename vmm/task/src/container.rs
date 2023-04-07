@@ -14,12 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::{
-    os::unix::prelude::ExitStatusExt,
-    path::Path,
-    process::ExitStatus,
-    sync::Arc,
-};
+use std::{os::unix::prelude::ExitStatusExt, path::Path, process::ExitStatus, sync::Arc};
 
 use async_trait::async_trait;
 use containerd_shim::{
@@ -32,10 +27,9 @@ use containerd_shim::{
         util::read_file_to_str,
     },
     error::{Error, Result},
-    ExitSignal,
     io::Stdio,
-    monitor::Topic, other,
-    other_error,
+    monitor::Topic,
+    other, other_error,
     protos::{
         cgroups::metrics::Metrics,
         protobuf::{CodedInputStream, Message},
@@ -43,6 +37,7 @@ use containerd_shim::{
         types::task::ProcessInfo,
     },
     util::read_spec,
+    ExitSignal,
 };
 use log::{debug, error};
 use nix::{sys::signalfd::signal::kill, unistd::Pid};
@@ -55,16 +50,14 @@ use tokio::{
     process::Command,
     sync::Mutex,
 };
-
-use vmm_common::{KUASAR_STATE_DIR, storage::Storage};
+use vmm_common::{storage::Storage, KUASAR_STATE_DIR};
 
 use crate::{
     device::rescan_pci_bus,
     io::{convert_stdio, copy_io_or_console, create_io},
     sandbox::SandboxResources,
-    util::wait_pid,
+    util::{read_io, read_storages, wait_pid},
 };
-use crate::util::{read_io, read_storages};
 
 #[allow(dead_code)]
 pub const GROUP_LABELS: [&str; 2] = [
@@ -145,7 +138,7 @@ impl ContainerFactory<KuasarContainer> for KuasarFactory {
             debug!("create options: {:?}", &opts);
         }
         let runtime = opts.binary_name.as_str();
-        
+
         // As the rootfs is already mounted when handling the storage, the root in spec is one of the
         // storage mount point. so no need to mount rootfs anymore
         let runc = create_runc(
@@ -159,15 +152,8 @@ impl ContainerFactory<KuasarContainer> for KuasarFactory {
         let id = req.id();
 
         let stdio = match read_io(&bundle, req.id(), None).await {
-            Ok(io) => { Stdio::new(&io.stdin, &io.stdout, &io.stderr, io.terminal) }
-            Err(_) => {
-                Stdio::new(
-                    req.stdin(),
-                    req.stdout(),
-                    req.stderr(),
-                    req.terminal(),
-                )
-            }
+            Ok(io) => Stdio::new(&io.stdin, &io.stdout, &io.stderr, io.terminal),
+            Err(_) => Stdio::new(req.stdin(), req.stdout(), req.stderr(), req.terminal()),
         };
 
         // for qemu, the io path is pci address for virtio-serial
@@ -278,18 +264,10 @@ impl ProcessFactory<ExecProcess> for KuasarExecFactory {
     async fn create(&self, req: &ExecProcessRequest) -> Result<ExecProcess> {
         let p = get_spec_from_request(req)?;
         let stdio = match read_io(&self.bundle, req.id(), Some(req.exec_id())).await {
-            Ok(io) => { Stdio::new(&io.stdin, &io.stdout, &io.stderr, io.terminal) }
-            Err(_) => {
-                Stdio::new(
-                    req.stdin(),
-                    req.stdout(),
-                    req.stderr(),
-                    req.terminal(),
-                )
-            }
+            Ok(io) => Stdio::new(&io.stdin, &io.stdout, &io.stderr, io.terminal),
+            Err(_) => Stdio::new(req.stdin(), req.stdout(), req.stderr(), req.terminal()),
         };
-        let stdio = convert_stdio(&stdio)
-            .await?;
+        let stdio = convert_stdio(&stdio).await?;
         Ok(ExecProcess {
             state: Status::CREATED,
             id: req.exec_id.to_string(),
@@ -478,7 +456,7 @@ impl ProcessLifecycle<ExecProcess> for KuasarExecLifecycle {
                 Pid::from_raw(p.pid as i32),
                 nix::sys::signal::Signal::try_from(signal as i32).unwrap(),
             )
-                .map_err(Into::into)
+            .map_err(Into::into)
         }
     }
 
@@ -533,7 +511,7 @@ pub fn create_runc(
     } else {
         root
     })
-        .join(namespace);
+    .join(namespace);
 
     let log = bundle.as_ref().join("log.json");
     let mut gopts = GlobalOpts::default()
@@ -595,8 +573,8 @@ impl Spawner for ShimExecutor {
 }
 
 async fn read_std<T>(std: Option<T>) -> String
-    where
-        T: AsyncRead + Unpin,
+where
+    T: AsyncRead + Unpin,
 {
     let mut std = std;
     if let Some(mut std) = std.take() {

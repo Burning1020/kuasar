@@ -14,18 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use crate::network::{NetworkInterface, Route};
+use std::{
+    os::unix::io::{IntoRawFd, RawFd},
+    time::Duration,
+};
+
 use anyhow::anyhow;
 use containerd_sandbox::error::{Error, Result};
-use vmm_common::api::{sandbox::*, sandbox_ttrpc::SandboxServiceClient};
 use log::error;
 use nix::{
     sys::socket::{connect, socket, AddressFamily, SockFlag, SockType, UnixAddr, VsockAddr},
     unistd::close,
-};
-use std::{
-    os::unix::io::{IntoRawFd, RawFd},
-    time::Duration,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -33,6 +32,9 @@ use tokio::{
     time::timeout,
 };
 use ttrpc::{context::with_timeout, r#async::Client};
+use vmm_common::api::{sandbox::*, sandbox_ttrpc::SandboxServiceClient};
+
+use crate::network::{NetworkInterface, Route};
 
 const HVSOCK_RETRY_TIMEOUT: u64 = 10;
 

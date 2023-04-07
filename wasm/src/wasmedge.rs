@@ -16,41 +16,44 @@ limitations under the License.
 
 #![cfg(feature = "wasmedge")]
 
-use std::fs::OpenOptions;
-use std::os::unix::prelude::{IntoRawFd, RawFd};
-use std::process::exit;
-use std::sync::Arc;
-
-use containerd_shim::api::{CreateTaskRequest, ExecProcessRequest, Status};
-use containerd_shim::asynchronous::container::{
-    ContainerFactory, ContainerTemplate, ProcessFactory,
+use std::{
+    fs::OpenOptions,
+    os::unix::prelude::{IntoRawFd, RawFd},
+    process::exit,
+    sync::Arc,
 };
-use containerd_shim::asynchronous::monitor::{monitor_subscribe, monitor_unsubscribe};
-use containerd_shim::asynchronous::processes::{ProcessLifecycle, ProcessTemplate};
-use containerd_shim::asynchronous::task::TaskService;
-use containerd_shim::asynchronous::util::{mkdir, mount_rootfs, read_spec};
-use containerd_shim::error::Error;
-use containerd_shim::io::Stdio;
-use containerd_shim::monitor::{Subject, Topic};
-use containerd_shim::other_error;
-use containerd_shim::processes::Process;
-use containerd_shim::protos::cgroups::metrics::Metrics;
-use containerd_shim::protos::shim::oci::Options;
-use containerd_shim::protos::types::task::ProcessInfo;
-use containerd_shim::ExitSignal;
+
+use containerd_shim::{
+    api::{CreateTaskRequest, ExecProcessRequest, Status},
+    asynchronous::{
+        container::{ContainerFactory, ContainerTemplate, ProcessFactory},
+        monitor::{monitor_subscribe, monitor_unsubscribe},
+        processes::{ProcessLifecycle, ProcessTemplate},
+        task::TaskService,
+        util::{mkdir, mount_rootfs, read_spec},
+    },
+    error::Error,
+    io::Stdio,
+    monitor::{Subject, Topic},
+    other_error,
+    processes::Process,
+    protos::{cgroups::metrics::Metrics, shim::oci::Options, types::task::ProcessInfo},
+    ExitSignal,
+};
 use log::debug;
-use nix::errno::Errno;
-use nix::fcntl::OFlag;
-use nix::sched::{setns, CloneFlags};
-use nix::sys::signal::kill;
-use nix::sys::stat::Mode;
-use nix::unistd::{dup2, fork, ForkResult, Pid};
+use nix::{
+    errno::Errno,
+    fcntl::OFlag,
+    sched::{setns, CloneFlags},
+    sys::{signal::kill, stat::Mode},
+    unistd::{dup2, fork, ForkResult, Pid},
+};
 use oci_spec::runtime::Spec;
-use wasmedge_sdk::config::{CommonConfigOptions, ConfigBuilder, HostRegistrationConfigOptions};
-use wasmedge_sdk::error::WasmEdgeError;
-use wasmedge_sdk::params;
-use wasmedge_sdk::PluginManager;
-use wasmedge_sdk::Vm;
+use wasmedge_sdk::{
+    config::{CommonConfigOptions, ConfigBuilder, HostRegistrationConfigOptions},
+    error::WasmEdgeError,
+    params, PluginManager, Vm,
+};
 
 pub type ExecProcess = ProcessTemplate<WasmEdgeExecLifecycle>;
 pub type InitProcess = ProcessTemplate<WasmEdgeInitLifecycle>;

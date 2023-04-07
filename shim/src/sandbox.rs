@@ -39,10 +39,9 @@ use containerd_shim::{
 use log::{info, warn};
 use nix::mount::{mount, MsFlags};
 use tokio::{
-    fs::{copy, create_dir_all, File},
+    fs::{copy, create_dir_all, remove_dir_all, File},
     sync::Mutex,
 };
-use tokio::fs::remove_dir_all;
 use tonic::transport::Channel;
 
 use crate::{
@@ -524,17 +523,13 @@ impl<T> SandboxHandler<T> {
         let id = self.id();
 
         let sandbox_path = Path::new(CRI_SANDBOX_ROOT_PATH).join(&id);
-        remove_dir_all(sandbox_path)
-            .await
-            .unwrap_or_default();
+        remove_dir_all(sandbox_path).await.unwrap_or_default();
 
         let shm_path = Path::new(CRI_SANDBOX_STATE_PATH).join(&id).join("shm");
         // detech is 0x2
         unmount(shm_path.to_str().unwrap(), 2).map_err(other_error!(e, "umount shm"))?;
 
-        remove_dir_all(shm_path)
-            .await
-            .unwrap_or_default();
+        remove_dir_all(shm_path).await.unwrap_or_default();
 
         Ok(())
     }

@@ -24,7 +24,6 @@ use containerd_shim::{
     util::IntoOption,
 };
 use futures::StreamExt;
-use vmm_common::{api::sandbox_ttrpc::create_sandbox_service, mount::mount, KUASAR_STATE_DIR};
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn, LevelFilter};
 use nix::{
@@ -36,6 +35,7 @@ use nix::{
     unistd::Pid,
 };
 use signal_hook_tokio::Signals;
+use vmm_common::{api::sandbox_ttrpc::create_sandbox_service, mount::mount, KUASAR_STATE_DIR};
 
 use crate::{
     config::TaskConfig,
@@ -116,12 +116,7 @@ lazy_static! {
         fstype: "virtiofs",
         src: "kuasar",
         dest: KUASAR_STATE_DIR,
-        options: vec![
-            "relatime",
-            "nodev",
-            "sync",
-            "dirsync",
-        ]
+        options: vec!["relatime", "nodev", "sync", "dirsync",]
     },];
 }
 

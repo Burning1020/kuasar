@@ -21,14 +21,12 @@ use containerd_sandbox::{
     Sandbox,
 };
 use log::debug;
-
-use vmm_common::storage::ANNOTATION_KEY_STORAGE;
-use vmm_common::STORAGE_FILE_PREFIX;
+use vmm_common::{storage::ANNOTATION_KEY_STORAGE, STORAGE_FILE_PREFIX};
 
 use crate::{
-    container::handler::Handler, sandbox::KuasarSandbox, storage::mount::is_bind_shm, vm::VM,
+    container::handler::Handler, sandbox::KuasarSandbox, storage::mount::is_bind_shm,
+    utils::write_file_atomic, vm::VM,
 };
-use crate::utils::write_file_atomic;
 
 pub struct StorageHandler {
     container_id: String,
@@ -44,8 +42,8 @@ impl StorageHandler {
 
 #[async_trait]
 impl<T> Handler<KuasarSandbox<T>> for StorageHandler
-    where
-        T: VM + Sync + Send,
+where
+    T: VM + Sync + Send,
 {
     async fn handle(&self, sandbox: &mut KuasarSandbox<T>) -> Result<()> {
         let container = sandbox.container(&*self.container_id).await?;
@@ -108,7 +106,10 @@ impl<T> Handler<KuasarSandbox<T>> for StorageHandler
                 x.path = root_source;
             }
         };
-        let storage_file_path = format!("{}/{}-{}", container.data.bundle, STORAGE_FILE_PREFIX, self.container_id);
+        let storage_file_path = format!(
+            "{}/{}-{}",
+            container.data.bundle, STORAGE_FILE_PREFIX, self.container_id
+        );
         write_file_atomic(&storage_file_path, &*storage_str).await?;
 
         container.data.rootfs = vec![];
@@ -117,8 +118,13 @@ impl<T> Handler<KuasarSandbox<T>> for StorageHandler
 
     async fn rollback(&self, sandbox: &mut KuasarSandbox<T>) -> Result<()> {
         let container = sandbox.container(&*self.container_id).await?;
-        let storage_file_path = format!("{}/{}-{}", container.data.bundle, STORAGE_FILE_PREFIX, self.container_id);
-        tokio::fs::remove_file(&storage_file_path).await.unwrap_or_default();
+        let storage_file_path = format!(
+            "{}/{}-{}",
+            container.data.bundle, STORAGE_FILE_PREFIX, self.container_id
+        );
+        tokio::fs::remove_file(&storage_file_path)
+            .await
+            .unwrap_or_default();
         Ok(())
     }
 }

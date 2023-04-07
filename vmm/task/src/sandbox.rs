@@ -17,11 +17,11 @@ limitations under the License.
 use std::{path::Path, time::Duration};
 
 use containerd_shim::{error::Error, other, other_error, util::IntoOption, Result};
+use log::{debug, warn};
 use vmm_common::{
     mount::{mount, unmount},
     storage::{Storage, DRIVERBLKTYPE, DRIVEREPHEMERALTYPE, DRIVERSCSITYPE},
 };
-use log::{debug, warn};
 
 use crate::device::{scan_scsi_bus, Device, DeviceMatcher, DeviceMonitor, DeviceType};
 

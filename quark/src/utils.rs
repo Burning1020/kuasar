@@ -14,22 +14,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::os::unix::prelude::RawFd;
-use std::path::Path;
+use std::{os::unix::prelude::RawFd, path::Path};
 
 use anyhow::anyhow;
-use containerd_sandbox::error::{Error, Result};
-use containerd_sandbox::spec::Mount;
+use containerd_sandbox::{
+    error::{Error, Result},
+    spec::Mount,
+};
 use containerd_shim::util::IntoOption;
 use log::{debug, error};
-use nix::errno::Errno;
-use nix::{libc, NixPath};
-
-use nix::sys::socket::SockType;
-use nix::sys::socket::{bind, socket, AddressFamily, SockAddr, SockFlag, UnixAddr};
-use nix::unistd::close;
-use tokio::fs::OpenOptions;
-use tokio::io::AsyncWriteExt;
+use nix::{
+    errno::Errno,
+    libc,
+    sys::socket::{bind, socket, AddressFamily, SockAddr, SockFlag, SockType, UnixAddr},
+    unistd::close,
+    NixPath,
+};
+use tokio::{fs::OpenOptions, io::AsyncWriteExt};
 
 pub const MNT_NOFOLLOW: i32 = 0x8;
 

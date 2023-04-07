@@ -22,10 +22,10 @@ pub mod block;
 pub mod console;
 pub mod device;
 pub mod fs;
+pub mod pmem;
 pub mod rng;
 pub mod virtio_net;
 pub mod vsock;
-pub mod pmem;
 
 pub trait CloudHypervisorDevice: Device + ToCmdLineParams + Sync + Send {}
 

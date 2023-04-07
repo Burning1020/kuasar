@@ -18,14 +18,13 @@ use containerd_sandbox::SandboxOption;
 
 use crate::{
     cloud_hypervisor::{
-        CloudHypervisorVM,
         config::CloudHypervisorVMConfig,
-        devices::{block::Disk, console::Console, fs::Fs, rng::Rng, vsock::Vsock},
+        devices::{block::Disk, console::Console, fs::Fs, pmem::Pmem, rng::Rng, vsock::Vsock},
+        CloudHypervisorVM,
     },
     utils::get_netns,
     vm::VMFactory,
 };
-use crate::cloud_hypervisor::devices::pmem::Pmem;
 
 pub struct CloudHypervisorVMFactory {
     vm_config: CloudHypervisorVMConfig,

@@ -16,10 +16,12 @@ limitations under the License.
 
 use std::{
     ffi::CStr,
+    os::unix::{
+        fs::OpenOptionsExt,
+        prelude::{AsRawFd, OwnedFd},
+    },
     path::Path,
 };
-use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::prelude::{AsRawFd, OwnedFd};
 
 use anyhow::anyhow;
 use containerd_sandbox::error::Result;
@@ -27,12 +29,12 @@ use futures_util::TryStreamExt;
 use libc::{IFF_MULTI_QUEUE, IFF_NO_PI, IFF_TAP, IFF_VNET_HDR};
 use netlink_packet_route::{
     link::nlas::{Info, InfoData, InfoIpVlan, InfoKind, InfoMacVlan, InfoMacVtap, InfoVlan},
-    LinkMessage,
     nlas::link::InfoVxlan,
+    LinkMessage,
 };
 use nix::{
     ioctl_read_bad, ioctl_write_ptr_bad, libc,
-    sys::socket::{AddressFamily, socket, SockFlag, SockType},
+    sys::socket::{socket, AddressFamily, SockFlag, SockType},
     unistd::close,
 };
 use rtnetlink::Handle;
@@ -41,7 +43,7 @@ use serde_derive::{Deserialize, Serialize};
 use crate::{
     device::{DeviceInfo, PhysicalDeviceInfo, TapDeviceInfo, VhostUserDeviceInfo},
     network::{
-        address::{CniIPAddress, convert_to_ip_address, IpNet, MacAddress},
+        address::{convert_to_ip_address, CniIPAddress, IpNet, MacAddress},
         create_netlink_handle, execute_in_netns, run_in_new_netns,
     },
     sandbox::KuasarSandbox,
@@ -414,7 +416,7 @@ fn get_bdf_for_eth(if_name: &str) -> Result<String> {
         SockFlag::empty(),
         None,
     )
-        .map_err(|e| anyhow!("failed to create inet socket to get bdf: {}", e))?;
+    .map_err(|e| anyhow!("failed to create inet socket to get bdf: {}", e))?;
     let mut drv_info = EthtoolDrvInfo {
         cmd: ETHTOOL_GDRVINFO,
         driver: [0u8; 32],
@@ -483,7 +485,7 @@ async fn create_tap_in_netns(
             tap_name,
             netns
         )
-            .into())
+        .into())
     };
 }
 
@@ -577,7 +579,7 @@ async fn bind_device_to_driver(driver: &str, bdf: &str) -> Result<()> {
             result_driver,
             driver
         )
-            .into());
+        .into());
     }
     Ok(())
 }

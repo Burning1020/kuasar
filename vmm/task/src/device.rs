@@ -162,7 +162,8 @@ impl DeviceMonitor {
     }
 
     async fn init_scsi_devices(&self) {
-        let mut scsi_dir_entries = if let Ok(e) = tokio::fs::read_dir(SYSFS_SCSI_DEVICE_PATH).await {
+        let mut scsi_dir_entries = if let Ok(e) = tokio::fs::read_dir(SYSFS_SCSI_DEVICE_PATH).await
+        {
             e
         } else {
             debug!("no scsi driver installed");

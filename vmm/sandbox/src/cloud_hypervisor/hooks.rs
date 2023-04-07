@@ -17,15 +17,8 @@ limitations under the License.
 use containerd_sandbox::error::{Error, Result};
 
 use crate::{
-    cloud_hypervisor::{
-        CloudHypervisorVM,
-    },
-    sandbox::{
-        KuasarSandbox,
-    },
-    vm::Hooks,
+    cloud_hypervisor::CloudHypervisorVM, sandbox::KuasarSandbox, utils::get_resources, vm::Hooks,
 };
-use crate::utils::get_resources;
 
 pub struct CloudHypervisorHooks {}
 

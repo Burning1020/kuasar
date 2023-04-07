@@ -19,9 +19,9 @@ use std::{
     time::Duration,
 };
 
-use containerd_shim::{error::Error, other, other_error};
 use containerd_shim::{
-    error::Result,
+    error::{Error, Result},
+    other, other_error,
     protos::shim_async::{Client, TaskClient},
 };
 use tokio::{net::UnixStream, time::timeout};

@@ -20,18 +20,17 @@ use containerd_sandbox::{
     data::{Io, ProcessData},
     Sandbox,
 };
-
 use vmm_common::IO_FILE_PREFIX;
 
 use crate::{
     container::{
-        handler::{Handler, io::attach_pipe},
+        handler::{io::attach_pipe, Handler},
         KuasarProcess,
     },
     sandbox::KuasarSandbox,
+    utils::write_file_atomic,
     vm::VM,
 };
-use crate::utils::write_file_atomic;
 
 pub struct ProcessHandler {
     container_id: String,
@@ -49,8 +48,8 @@ impl ProcessHandler {
 
 #[async_trait]
 impl<T> Handler<KuasarSandbox<T>> for ProcessHandler
-    where
-        T: VM + Sync + Send,
+where
+    T: VM + Sync + Send,
 {
     async fn handle(
         &self,
@@ -79,7 +78,10 @@ impl<T> Handler<KuasarSandbox<T>> for ProcessHandler
             new_proc.io_devices = io_devices;
             let io_str = serde_json::to_string(&new_proc.data.io)
                 .map_err(|e| anyhow!("failed to parse io in container, {}", e))?;
-            let io_file_path = format!("{}/{}-{}-{}", bundle, IO_FILE_PREFIX, self.container_id, self.proc.id);
+            let io_file_path = format!(
+                "{}/{}-{}-{}",
+                bundle, IO_FILE_PREFIX, self.container_id, self.proc.id
+            );
             write_file_atomic(io_file_path, &*io_str).await?;
         }
         let container = sandbox.container_mut(&*self.container_id)?;
@@ -115,8 +117,8 @@ impl ProcessRemoveHandler {
 
 #[async_trait]
 impl<T> Handler<KuasarSandbox<T>> for ProcessRemoveHandler
-    where
-        T: VM + Sync + Send,
+where
+    T: VM + Sync + Send,
 {
     async fn handle(
         &self,
@@ -161,7 +163,12 @@ async fn remove_io_devices_for_process<T: VM + Sync + Send>(
     for device_id in io_devices {
         sandbox.vm.hot_detach(&*device_id).await.unwrap_or_default();
     }
-    let io_file_path = format!("{}/{}-{}-{}", bundle, IO_FILE_PREFIX, container_id, process_id);
-    tokio::fs::remove_file(&io_file_path).await.unwrap_or_default();
+    let io_file_path = format!(
+        "{}/{}-{}-{}",
+        bundle, IO_FILE_PREFIX, container_id, process_id
+    );
+    tokio::fs::remove_file(&io_file_path)
+        .await
+        .unwrap_or_default();
     Ok(())
 }

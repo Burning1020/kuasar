@@ -25,7 +25,6 @@ use containerd_sandbox::{
     utils::cleanup_mounts,
     ContainerOption, Sandbox, SandboxOption, SandboxStatus, Sandboxer,
 };
-use vmm_common::{api::sandbox_ttrpc::SandboxServiceClient, storage::Storage};
 use log::{error, info, warn};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::{
@@ -33,15 +32,16 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     sync::{Mutex, RwLock},
 };
+use vmm_common::{api::sandbox_ttrpc::SandboxServiceClient, storage::Storage};
 
 use crate::{
     client::{client_check, client_update_interfaces, client_update_routes, new_sandbox_client},
     container::KuasarContainer,
     network::{Network, NetworkConfig},
+    utils::get_resources,
     vm::{Hooks, Recoverable, VMFactory, VM},
     NAMESPACE_NET,
 };
-use crate::utils::get_resources;
 
 pub const KUASAR_GUEST_SHARE_DIR: &str = "/run/kuasar/storage/containers/";
 

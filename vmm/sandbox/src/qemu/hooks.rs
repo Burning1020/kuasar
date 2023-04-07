@@ -18,18 +18,11 @@ use async_trait::async_trait;
 use containerd_sandbox::error::{Error, Result};
 
 use crate::{
-    qemu::{
-        config::QemuVMConfig,
-        devices::QemuDevice,
-        QemuVM,
-    },
-    sandbox::{
-        KuasarSandbox,
-        StaticDeviceSpec,
-    },
+    qemu::{config::QemuVMConfig, devices::QemuDevice, QemuVM},
+    sandbox::{KuasarSandbox, StaticDeviceSpec},
+    utils::get_resources,
     vm::Hooks,
 };
-use crate::utils::get_resources;
 
 pub struct QemuHooks {
     #[allow(dead_code)]
@@ -70,11 +63,12 @@ async fn process_config(sandbox: &mut KuasarSandbox<QemuVM>) -> Result<()> {
             sandbox.vm.config.smp.max_cpus = base as u32;
         }
         if resources.memory_limit_in_bytes > 0 {
-            sandbox.vm.config.memory.size =
-                format!("{}M", ((resources.memory_limit_in_bytes) as u64 / bytefmt::MIB) as u32);
+            sandbox.vm.config.memory.size = format!(
+                "{}M",
+                ((resources.memory_limit_in_bytes) as u64 / bytefmt::MIB) as u32
+            );
         }
         // TODO add other resource limits to vm
     }
     Ok(())
-
 }

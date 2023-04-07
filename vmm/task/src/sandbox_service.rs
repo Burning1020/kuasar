@@ -18,11 +18,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use containerd_shim::{error::Result, TtrpcContext, TtrpcResult};
+use tokio::sync::Mutex;
 use vmm_common::{
     api,
     api::{empty::Empty, sandbox::*},
 };
-use tokio::sync::Mutex;
 
 use crate::netlink::Handle;
 

@@ -14,26 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use containerd_sandbox::data::{ContainerData, SandboxData};
-use containerd_sandbox::error::{Error, Result};
-use containerd_sandbox::signal::ExitSignal;
 use containerd_sandbox::{
+    data::{ContainerData, SandboxData},
+    error::{Error, Result},
+    signal::ExitSignal,
     Container, ContainerOption, Sandbox, SandboxOption, SandboxStatus, Sandboxer,
 };
-
-use containerd_shim::asynchronous::task::TaskService;
-
-use containerd_shim::protos::shim::shim_ttrpc_async::create_task;
-use containerd_shim::protos::ttrpc::asynchronous::Server;
+use containerd_shim::{
+    asynchronous::task::TaskService,
+    protos::{shim::shim_ttrpc_async::create_task, ttrpc::asynchronous::Server},
+};
 use log::debug;
-use tokio::fs::create_dir_all;
-use tokio::sync::mpsc::channel;
-use tokio::sync::{Mutex, RwLock};
+use tokio::{
+    fs::create_dir_all,
+    sync::{mpsc::channel, Mutex, RwLock},
+};
 
 #[cfg(feature = "wasmedge")]
 use crate::wasmedge::{process_exits, WasmEdgeContainer, WasmEdgeContainerFactory};

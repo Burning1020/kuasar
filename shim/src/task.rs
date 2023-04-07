@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use containerd_shim::{
     api::*,
@@ -22,7 +24,6 @@ use containerd_shim::{
     protos::{shim_async::TaskClient, ttrpc::context::with_timeout},
     DeleteResponse, Task, TtrpcContext, TtrpcResult,
 };
-use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::{io::ContainerIoTransport, service::KuasarServer};
@@ -36,7 +37,11 @@ pub struct TaskHandler {
 
 impl TaskHandler {
     async fn state(&self, ctx: &TtrpcContext, req: StateRequest) -> TtrpcResult<StateResponse> {
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
         task_cli.state(with_timeout(ctx.timeout_nano), &req).await
     }
@@ -47,37 +52,61 @@ impl TaskHandler {
         req: CreateTaskRequest,
     ) -> TtrpcResult<CreateTaskResponse> {
         // Call Task.Create with new request.
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
         task_cli.create(with_timeout(ctx.timeout_nano), &req).await
     }
 
     async fn start(&self, ctx: &TtrpcContext, req: &StartRequest) -> TtrpcResult<StartResponse> {
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
         task_cli.start(with_timeout(ctx.timeout_nano), req).await
     }
 
     async fn delete(&self, ctx: &TtrpcContext, req: &DeleteRequest) -> TtrpcResult<DeleteResponse> {
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
         task_cli.delete(with_timeout(ctx.timeout_nano), req).await
     }
 
     async fn pids(&self, ctx: &TtrpcContext, req: PidsRequest) -> TtrpcResult<PidsResponse> {
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
         task_cli.pids(with_timeout(ctx.timeout_nano), &req).await
     }
 
     async fn pause(&self, ctx: &TtrpcContext, req: PauseRequest) -> TtrpcResult<Empty> {
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
         task_cli.pause(with_timeout(ctx.timeout_nano), &req).await
     }
 
     async fn resume(&self, ctx: &TtrpcContext, req: ResumeRequest) -> TtrpcResult<Empty> {
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
         task_cli.resume(with_timeout(ctx.timeout_nano), &req).await
     }
@@ -87,52 +116,88 @@ impl TaskHandler {
         ctx: &TtrpcContext,
         req: CheckpointTaskRequest,
     ) -> TtrpcResult<Empty> {
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
-        task_cli.checkpoint(with_timeout(ctx.timeout_nano), &req).await
+        task_cli
+            .checkpoint(with_timeout(ctx.timeout_nano), &req)
+            .await
     }
 
     async fn kill(&self, ctx: &TtrpcContext, req: KillRequest) -> TtrpcResult<Empty> {
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
         task_cli.kill(with_timeout(ctx.timeout_nano), &req).await
     }
 
     async fn exec(&self, ctx: &TtrpcContext, req: ExecProcessRequest) -> TtrpcResult<Empty> {
         // Call Task.Exec lastly
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
         task_cli.exec(with_timeout(ctx.timeout_nano), &req).await
     }
 
     async fn resize_pty(&self, ctx: &TtrpcContext, req: ResizePtyRequest) -> TtrpcResult<Empty> {
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
-        task_cli.resize_pty(with_timeout(ctx.timeout_nano), &req).await
+        task_cli
+            .resize_pty(with_timeout(ctx.timeout_nano), &req)
+            .await
     }
 
     async fn close_io(&self, ctx: &TtrpcContext, req: CloseIORequest) -> TtrpcResult<Empty> {
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
-        task_cli.close_io(with_timeout(ctx.timeout_nano), &req).await
+        task_cli
+            .close_io(with_timeout(ctx.timeout_nano), &req)
+            .await
     }
 
     async fn update(&self, ctx: &TtrpcContext, req: UpdateTaskRequest) -> TtrpcResult<Empty> {
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
         task_cli.update(with_timeout(ctx.timeout_nano), &req).await
     }
 
     async fn wait(&self, ctx: &TtrpcContext, req: &WaitRequest) -> TtrpcResult<WaitResponse> {
-        let task_cli = self.task_cli.lock().await.clone()
-            .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
-        task_cli
-            .wait(with_timeout(ctx.timeout_nano), req)
+        let task_cli = self
+            .task_cli
+            .lock()
             .await
+            .clone()
+            .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
+        task_cli.wait(with_timeout(ctx.timeout_nano), req).await
     }
 
     async fn stats(&self, ctx: &TtrpcContext, req: StatsRequest) -> TtrpcResult<StatsResponse> {
-        let task_cli = self.task_cli.lock().await.clone()
+        let task_cli = self
+            .task_cli
+            .lock()
+            .await
+            .clone()
             .ok_or_else(|| other!("FATAL: task_cli for vm task server is not initialized!"))?;
         task_cli.stats(with_timeout(ctx.timeout_nano), &req).await
     }

@@ -15,9 +15,11 @@ limitations under the License.
 */
 
 use futures_util::StreamExt;
+use netlink_packet_core::{
+    NetlinkMessage, NetlinkPayload, NLM_F_ACK, NLM_F_CREATE, NLM_F_EXCL, NLM_F_REQUEST,
+};
 use netlink_packet_route::{RtnlMessage, TcMessage};
-use netlink_packet_core::{NetlinkMessage, NetlinkPayload, NLM_F_ACK, NLM_F_CREATE, NLM_F_EXCL, NLM_F_REQUEST};
-use rtnetlink::{Error, Handle, try_nl};
+use rtnetlink::{try_nl, Error, Handle};
 
 const HANDLE_INGRESS: u32 = 0xfffffff1;
 const HANDLE_TC_FILTER: u32 = 0xffff0000;

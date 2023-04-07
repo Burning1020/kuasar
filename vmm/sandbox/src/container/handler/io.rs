@@ -14,15 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 use containerd_sandbox::{data::Io, error::Result, Sandbox};
 use log::debug;
-use anyhow::anyhow;
-
 use vmm_common::IO_FILE_PREFIX;
 
-use crate::{container::handler::Handler, sandbox::KuasarSandbox, vm::VM};
-use crate::utils::write_file_atomic;
+use crate::{
+    container::handler::Handler, sandbox::KuasarSandbox, utils::write_file_atomic, vm::VM,
+};
 
 pub struct IoHandler {
     container_id: String,
@@ -40,8 +40,8 @@ impl IoHandler {
 
 #[async_trait]
 impl<T> Handler<KuasarSandbox<T>> for IoHandler
-    where
-        T: VM + Sync + Send,
+where
+    T: VM + Sync + Send,
 {
     async fn handle(&self, sandbox: &mut KuasarSandbox<T>) -> Result<()> {
         let mut io_devices = vec![];
@@ -59,7 +59,10 @@ impl<T> Handler<KuasarSandbox<T>> for IoHandler
         });
         let io_str = serde_json::to_string(&container.data.io)
             .map_err(|e| anyhow!("failed to parse io in container, {}", e))?;
-        let io_file_path = format!("{}/{}-{}", container.data.bundle, IO_FILE_PREFIX, self.container_id);
+        let io_file_path = format!(
+            "{}/{}-{}",
+            container.data.bundle, IO_FILE_PREFIX, self.container_id
+        );
         write_file_atomic(io_file_path, &*io_str).await?;
         container.io_devices = io_devices;
         Ok(())
@@ -72,7 +75,9 @@ impl<T> Handler<KuasarSandbox<T>> for IoHandler
             sandbox.vm.hot_detach(&*device_id).await?;
         }
         let io_file_path = format!("{}/{}-{}", bundle, IO_FILE_PREFIX, self.container_id);
-        tokio::fs::remove_file(&io_file_path).await.unwrap_or_default();
+        tokio::fs::remove_file(&io_file_path)
+            .await
+            .unwrap_or_default();
         let mut container = sandbox.container_mut(&*self.container_id)?;
         container.io_devices = vec![];
         container.data.io = None;

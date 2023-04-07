@@ -17,10 +17,10 @@ use containerd_shim::{
 };
 use futures::{future, TryStreamExt};
 use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
-use vmm_common::api::sandbox::{IPAddress, IPFamily, Interface, Route};
+use netlink_packet_route as packet;
 use nix::errno::Errno;
 use rtnetlink::{new_connection, IpVersion};
-use netlink_packet_route as packet;
+use vmm_common::api::sandbox::{IPAddress, IPFamily, Interface, Route};
 
 /// Search criteria to use when looking for a link in `find_link`.
 pub enum LinkFilter<'a> {

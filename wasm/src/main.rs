@@ -15,14 +15,17 @@ limitations under the License.
 */
 
 use containerd_shim::asynchronous::monitor::monitor_notify_by_pid;
-
 use futures::StreamExt;
 use log::{debug, error, warn, LevelFilter};
-use nix::errno::Errno;
-use nix::libc;
-use nix::sys::wait;
-use nix::sys::wait::{WaitPidFlag, WaitStatus};
-use nix::unistd::Pid;
+use nix::{
+    errno::Errno,
+    libc,
+    sys::{
+        wait,
+        wait::{WaitPidFlag, WaitStatus},
+    },
+    unistd::Pid,
+};
 use signal_hook_tokio::Signals;
 
 use crate::sandbox::WasmSandboxer;

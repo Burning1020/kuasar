@@ -17,23 +17,23 @@ limitations under the License.
 use std::path::Path;
 
 use containerd_shim::{
-    asynchronous::monitor::{monitor_unsubscribe, Subscription},
-    error::{Result, Error},
+    asynchronous::{
+        monitor::{monitor_unsubscribe, Subscription},
+        util::read_file_to_str,
+    },
+    error::{Error, Result},
     monitor::{ExitEvent, Subject},
     other_error,
 };
-use containerd_shim::asynchronous::util::read_file_to_str;
-
-use vmm_common::{Io, IO_FILE_PREFIX, STORAGE_FILE_PREFIX};
-use vmm_common::storage::Storage;
+use vmm_common::{storage::Storage, Io, IO_FILE_PREFIX, STORAGE_FILE_PREFIX};
 
 pub async fn wait_pid(pid: i32, s: Subscription) -> i32 {
     let mut s = s;
     loop {
         if let Some(ExitEvent {
-                        subject: Subject::Pid(epid),
-                        exit_code: code,
-                    }) = s.rx.recv().await
+            subject: Subject::Pid(epid),
+            exit_code: code,
+        }) = s.rx.recv().await
         {
             if pid == epid {
                 monitor_unsubscribe(s.id).await.unwrap_or_default();
@@ -47,11 +47,14 @@ pub async fn read_storages(bundle: impl AsRef<Path>, id: &str) -> Result<Vec<Sto
     let storage_file_name = format!("{}-{}", STORAGE_FILE_PREFIX, id);
     let path = bundle.as_ref().join(&storage_file_name);
     let content = read_file_to_str(&path).await?;
-    serde_json::from_str::<Vec<Storage>>(content.as_str())
-        .map_err(other_error!(e, "read storage"))
+    serde_json::from_str::<Vec<Storage>>(content.as_str()).map_err(other_error!(e, "read storage"))
 }
 
-pub async fn read_io(bundle: impl AsRef<Path>, container_id: &str, exec_id: Option<&str>) -> Result<Io> {
+pub async fn read_io(
+    bundle: impl AsRef<Path>,
+    container_id: &str,
+    exec_id: Option<&str>,
+) -> Result<Io> {
     let io_file_name = if let Some(eid) = exec_id {
         format!("{}-{}-{}", IO_FILE_PREFIX, container_id, eid)
     } else {
@@ -59,6 +62,5 @@ pub async fn read_io(bundle: impl AsRef<Path>, container_id: &str, exec_id: Opti
     };
     let path = bundle.as_ref().join(&io_file_name);
     let content = read_file_to_str(&path).await?;
-    serde_json::from_str::<Io>(content.as_str())
-        .map_err(other_error!(e, "read io"))
+    serde_json::from_str::<Io>(content.as_str()).map_err(other_error!(e, "read io"))
 }
