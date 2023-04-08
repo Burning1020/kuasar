@@ -16,7 +16,7 @@
 set -e
 export IMAGE_NAME=${IMAGE_NAME:-"centos:7"}
 export ROOTFS_DIR=${ROOTFS_DIR:-"/tmp/kuasar-rootfs"}
-export CONTAINER_RUNTIME=${RUNTIME:-"docker"}
+export CONTAINER_RUNTIME=${RUNTIME:-"containerd"}
 CONTAINERD_NS=${CONTAINERD_NS:-"default"}
 
 # if build with ctr, then image name should have a default
@@ -59,7 +59,7 @@ case "${CONTAINER_RUNTIME}" in
 			--mount type=bind,src="${ROOTFS_DIR}",dst=/tmp/kuasar-rootfs,options=rbind:rw \
 			${IMAGE_NAME} \
 			${container_name} \
-			bash -x /kuasar/vmm/tools/image/centos/build_rootfs.sh
+			bash -x /kuasar/vmm/scripts/image/centos/build_rootfs.sh
 		;;
 	docker)
 		docker run \
@@ -69,7 +69,7 @@ case "${CONTAINER_RUNTIME}" in
 			-v "${REPO_DIR}":/kuasar \
 			-v "${ROOTFS_DIR}":"/tmp/kuasar-rootfs" \
 			${IMAGE_NAME} \
-			bash -x /kuasar/vmm/tools/image/centos/build_rootfs.sh
+			bash -x /kuasar/vmm/scripts/image/centos/build_rootfs.sh
 		;;
 	*)
 		echo "${CONTAINER_RUNTIME} is not supported yet"
@@ -77,4 +77,4 @@ case "${CONTAINER_RUNTIME}" in
 		;;
 esac
 
-bash -x ${REPO_DIR}/vmm/tools/image/build_image.sh
+bash -x ${REPO_DIR}/vmm/scripts/image/build_image.sh
