@@ -35,23 +35,25 @@ pub struct Route {
 }
 
 impl Route {
-    pub fn parse_from_message(msg: RouteMessage, intfs: &Vec<NetworkInterface>) -> Result<Self> {
+    pub fn parse_from_message(msg: RouteMessage, intfs: &[NetworkInterface]) -> Result<Self> {
         if msg.header.table != RT_TABLE_MAIN {
             return Err(anyhow!("ignore routes not in main table").into());
         }
-        let mut route = Route::default();
-        route.scope = msg.header.scope as u32;
+        let mut route = Route {
+            scope: msg.header.scope as u32,
+            ..Default::default()
+        };
         use netlink_packet_route::nlas::route::Nla;
         for nla in msg.nlas.into_iter() {
             match nla {
-                Nla::Destination(v) if v.len() > 0 => {
+                Nla::Destination(v) if !v.is_empty() => {
                     let ip = convert_to_ip_address(v)?.to_string();
                     route.dest = format!("{}/{}", ip, msg.header.destination_prefix_length);
                 }
-                Nla::Source(v) if v.len() > 0 => {
+                Nla::Source(v) if !v.is_empty() => {
                     route.source = convert_to_ip_address(v)?.to_string();
                 }
-                Nla::Gateway(v) if v.len() > 0 => {
+                Nla::Gateway(v) if !v.is_empty() => {
                     route.gateway = convert_to_ip_address(v)?.to_string();
                 }
                 Nla::Oif(u) => {

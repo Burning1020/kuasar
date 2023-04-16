@@ -162,7 +162,7 @@ impl HotAttachable for CharDevice {
 
     async fn execute_hot_detach(&self, client: &QmpClient) -> Result<()> {
         debug!("hot detach {:?}", self);
-        client.delete_device(&*self.id).await?;
+        client.delete_device(&self.id).await?;
         client.execute(self.to_chardev_remove()).await?;
         Ok(())
     }

@@ -47,10 +47,10 @@ where
         let mut io_devices = vec![];
         debug!("handle io {:?}", self.io);
         // TODO: what if it is not named pipe
-        let stdin = attach_pipe(&*self.io.stdin, sandbox, &mut io_devices).await?;
-        let stdout = attach_pipe(&*self.io.stdout, sandbox, &mut io_devices).await?;
-        let stderr = attach_pipe(&*self.io.stderr, sandbox, &mut io_devices).await?;
-        let container = sandbox.container_mut(&*self.container_id)?;
+        let stdin = attach_pipe(&self.io.stdin, sandbox, &mut io_devices).await?;
+        let stdout = attach_pipe(&self.io.stdout, sandbox, &mut io_devices).await?;
+        let stderr = attach_pipe(&self.io.stderr, sandbox, &mut io_devices).await?;
+        let container = sandbox.container_mut(&self.container_id)?;
         container.data.io = Some(Io {
             stdin,
             stdout,
@@ -63,22 +63,22 @@ where
             "{}/{}-{}",
             container.data.bundle, IO_FILE_PREFIX, self.container_id
         );
-        write_file_atomic(io_file_path, &*io_str).await?;
+        write_file_atomic(io_file_path, &io_str).await?;
         container.io_devices = io_devices;
         Ok(())
     }
 
     async fn rollback(&self, sandbox: &mut KuasarSandbox<T>) -> Result<()> {
-        let container = sandbox.container(&*self.container_id).await?;
+        let container = sandbox.container(&self.container_id).await?;
         let bundle = container.data.bundle.to_string();
         for device_id in container.io_devices.clone() {
-            sandbox.vm.hot_detach(&*device_id).await?;
+            sandbox.vm.hot_detach(&device_id).await?;
         }
         let io_file_path = format!("{}/{}-{}", bundle, IO_FILE_PREFIX, self.container_id);
         tokio::fs::remove_file(&io_file_path)
             .await
             .unwrap_or_default();
-        let mut container = sandbox.container_mut(&*self.container_id)?;
+        let mut container = sandbox.container_mut(&self.container_id)?;
         container.io_devices = vec![];
         container.data.io = None;
         Ok(())

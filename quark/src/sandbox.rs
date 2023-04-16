@@ -198,7 +198,7 @@ impl Sandbox for QuarkSandbox {
     type Container = QuarkContainer;
 
     fn status(&self) -> Result<SandboxStatus> {
-        return Ok(self.status.clone());
+        Ok(self.status.clone())
     }
 
     async fn ping(&self) -> Result<()> {
@@ -339,17 +339,17 @@ impl Sandbox for QuarkSandbox {
     }
 
     fn get_data(&self) -> Result<SandboxData> {
-        return Ok(self.data.clone());
+        Ok(self.data.clone())
     }
 }
 
 impl QuarkSandbox {
     fn get_sandbox_bundle(&self) -> String {
-        return format!("{}/sandbox", self.base_dir);
+        format!("{}/sandbox", self.base_dir)
     }
 
     fn get_container_bundle(&self, id: &str) -> String {
-        return format!("{}/sandbox/{}", self.base_dir, id);
+        format!("{}/sandbox/{}", self.base_dir, id)
     }
 
     async fn bind_mount_io(
@@ -414,7 +414,7 @@ impl QuarkSandbox {
 impl Container for QuarkContainer {
     fn get_data(&self) -> Result<ContainerData> {
         let data = self.data.clone();
-        return Ok(data);
+        Ok(data)
     }
 }
 

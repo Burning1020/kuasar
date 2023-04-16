@@ -59,7 +59,7 @@ impl TaskConfig {
             .map_err(io_error!(e, "failed to open /proc/cmdline"))?;
         let params: Vec<&str> = cmdline.split_ascii_whitespace().collect();
         for p in params {
-            let param: Vec<&str> = p.split("=").collect();
+            let param: Vec<&str> = p.split('=').collect();
             parse_cmdline!(param, SHAREFS_TYPE, config.sharefs_type, String::from);
             parse_cmdline!(param, LOG_LEVEL, config.log_level, String::from);
         }

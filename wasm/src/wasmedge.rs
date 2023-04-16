@@ -112,7 +112,7 @@ impl ContainerFactory<WasmEdgeContainer> for WasmEdgeContainerFactory {
     ) -> containerd_shim::Result<WasmEdgeContainer> {
         let mut spec: Spec = read_spec(req.bundle()).await?;
         spec.canonicalize_rootfs(req.bundle())
-            .map_err(|e| Error::InvalidArgument(format!("could not canonicalize rootfs: {}", e)))?;
+            .map_err(|e| Error::InvalidArgument(format!("could not canonicalize rootfs: {e}")))?;
         let rootfs = spec
             .root()
             .as_ref()
@@ -122,7 +122,7 @@ impl ContainerFactory<WasmEdgeContainer> for WasmEdgeContainerFactory {
             .path();
         mkdir(rootfs, 0o711).await?;
         for m in req.rootfs() {
-            mount_rootfs(&m, rootfs.as_path()).await?
+            mount_rootfs(m, rootfs.as_path()).await?
         }
         let stdio = Stdio::new(req.stdin(), req.stdout(), req.stderr(), req.terminal);
         let exit_signal = Arc::new(Default::default());
@@ -158,8 +158,8 @@ impl ProcessLifecycle<InitProcess> for WasmEdgeInitLifecycle {
     async fn start(&self, p: &mut InitProcess) -> containerd_shim::Result<()> {
         let spec = &p.lifecycle.spec;
         let vm = p.lifecycle.prototype_vm.clone();
-        let args = get_args(&spec);
-        let envs = get_envs(&spec);
+        let args = get_args(spec);
+        let envs = get_envs(spec);
         let rootfs = spec
             .root()
             .as_ref()
@@ -168,7 +168,7 @@ impl ProcessLifecycle<InitProcess> for WasmEdgeInitLifecycle {
             ))?
             .path();
         let mut preopens = vec![format!("/:{}", rootfs.display())];
-        preopens.append(&mut get_preopens(&spec));
+        preopens.append(&mut get_preopens(spec));
 
         debug!(
             "start wasm with args: {:?}, envs: {:?}, preopens: {:?}",
@@ -313,8 +313,7 @@ pub fn get_preopens(spec: &Spec) -> Vec<String> {
             }
         }
     }
-
-    return preopens;
+    preopens
 }
 
 pub fn get_envs(spec: &Spec) -> Vec<String> {
@@ -326,7 +325,7 @@ pub fn get_envs(spec: &Spec) -> Vec<String> {
         .env()
         .as_ref()
         .unwrap_or(&empty_envs);
-    return envs.to_vec();
+    envs.to_vec()
 }
 
 pub fn get_args(spec: &Spec) -> Vec<String> {
@@ -338,7 +337,7 @@ pub fn get_args(spec: &Spec) -> Vec<String> {
         .args()
         .as_ref()
         .unwrap_or(&empty_args);
-    return args.to_vec();
+    args.to_vec()
 }
 
 pub fn maybe_open_stdio(path: &str) -> Result<Option<RawFd>, std::io::Error> {
@@ -394,8 +393,8 @@ fn run_wasi_func(
     );
     let mut cmd = args[0].clone();
     let stripped = args[0].strip_prefix(std::path::MAIN_SEPARATOR);
-    if stripped.is_some() {
-        cmd = stripped.unwrap().to_string();
+    if let Some(stripped_cmd) = stripped {
+        cmd = stripped_cmd.to_string()
     }
     let stdio = p.stdio.clone();
 

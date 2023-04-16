@@ -78,7 +78,7 @@ async fn connect_to_hvsocket(addr: &str, port: &str) -> Result<RawFd> {
             .writable()
             .await
             .map_err(other_error!(e, "not writable"))?;
-        match stream.try_write(format!("CONNECT {}\n", port).as_bytes()) {
+        match stream.try_write(format!("CONNECT {port}\n").as_bytes()) {
             Ok(_) => {
                 stream
                     .readable()

@@ -155,7 +155,7 @@ async fn mount_storage(storage: &Storage) -> Result<()> {
     debug!("mounting storage {:?}", storage);
     let fstype = storage.fstype.as_str().none_if(|x| x.is_empty());
     let source = storage.source.as_str().none_if(|x| x.is_empty());
-    mount(fstype, source, &storage.options, &*storage.mount_point).map_err(other_error!(e, ""))?;
+    mount(fstype, source, &storage.options, &storage.mount_point).map_err(other_error!(e, ""))?;
     Ok(())
 }
 

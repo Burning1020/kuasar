@@ -14,7 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::{os::unix::prelude::ExitStatusExt, path::Path, process::ExitStatus, sync::Arc};
+use std::{
+    convert::TryFrom, os::unix::prelude::ExitStatusExt, path::Path, process::ExitStatus, sync::Arc,
+};
 
 use async_trait::async_trait;
 use containerd_shim::{
@@ -50,7 +52,7 @@ use tokio::{
     process::Command,
     sync::Mutex,
 };
-use vmm_common::{storage::Storage, KUASAR_STATE_DIR};
+use vmm_common::{mount::get_mount_type, storage::Storage, KUASAR_STATE_DIR};
 
 use crate::{
     device::rescan_pci_bus,
@@ -183,7 +185,7 @@ impl ContainerFactory<KuasarContainer> for KuasarFactory {
     }
 
     async fn cleanup(&self, _ns: &str, c: &KuasarContainer) -> containerd_shim::Result<()> {
-        self.sandbox.lock().await.defer_storages(&*c.id).await?;
+        self.sandbox.lock().await.defer_storages(&c.id).await?;
         Ok(())
     }
 }
@@ -199,9 +201,19 @@ impl KuasarFactory {
         let opts = &init.lifecycle.opts;
         let bundle = &init.lifecycle.bundle;
         let pid_path = Path::new(bundle).join(INIT_PID_FILE);
+        let mut no_pivot_root = opts.no_pivot_root;
+        // pivot_root could not work with initramfs
+        match get_mount_type("/") {
+            Ok(m_type) => {
+                if m_type == "rootfs".to_string() {
+                    no_pivot_root = true;
+                }
+            }
+            Err(e) => debug!("get mount type failed {}", e),
+        };
         let mut create_opts = runc::options::CreateOpts::new()
             .pid_file(&pid_path)
-            .no_pivot(opts.no_pivot_root)
+            .no_pivot(no_pivot_root)
             .no_new_keyring(opts.no_new_keyring)
             .detach(false);
         let (socket, pio) = if stdio.terminal {
@@ -371,7 +383,7 @@ impl ProcessLifecycle<InitProcess> for KuasarInitLifecycle {
     async fn ps(&self, p: &InitProcess) -> Result<Vec<ProcessInfo>> {
         let pids = self
             .runtime
-            .ps(&*p.id)
+            .ps(&p.id)
             .await
             .map_err(other_error!(e, "failed to execute runc ps"))?;
         Ok(pids
@@ -453,7 +465,7 @@ impl ProcessLifecycle<ExecProcess> for KuasarExecLifecycle {
         } else {
             // TODO this is kill from nix crate, it is os specific, maybe have annotated with target os
             kill(
-                Pid::from_raw(p.pid as i32),
+                Pid::from_raw(p.pid),
                 nix::sys::signal::Signal::try_from(signal as i32).unwrap(),
             )
             .map_err(Into::into)

@@ -23,7 +23,7 @@ use containerd_sandbox::{
 };
 use containerd_shim::mount::mount_rootfs;
 use log::debug;
-use nix::libc::{mkdir, MNT_DETACH};
+use nix::libc::MNT_DETACH;
 pub use utils::*;
 use vmm_common::{
     mount::{bind_mount, unmount, MNT_NOFOLLOW},
@@ -60,7 +60,7 @@ where
             return Ok(());
         }
         // handle tmpfs mount
-        let mount_info = get_mount_info(&*m.source).await?;
+        let mount_info = get_mount_info(&m.source).await?;
         if let Some(mi) = mount_info {
             if mi.fs_type == "tmpfs" {
                 self.handle_tmpfs_mount(&id, container_id, m, &mi).await?;
@@ -272,7 +272,8 @@ where
             .map(|s| (s.device_id.clone(), s.id.clone(), s.fstype.clone()))
             .collect();
         for info in storage_infos {
-            self.detach_storage(info.0, &*info.1, &*info.2).await?;
+            self.detach_storage(info.0.clone(), &info.1, &info.2)
+                .await?;
             self.storages.retain(|x| x.id != info.1);
         }
         Ok(())

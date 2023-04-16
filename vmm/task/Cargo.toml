@@ -1,8 +1,9 @@
 [package]
 name = "vmm-task"
 version = "0.1.0"
-edition = "2021"
-keywords = ["containerd", "shim", "containers"]
+
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 vmm-common = {path = "../common"}
@@ -31,5 +32,5 @@ tokio-vsock = "0.3.1"
 pin-project-lite = "0.2.7"
 ttrpc = { version = "0.7", features = ["async"] }
 
-containerd-shim = { git="", features=["async"] }
-runc = { git="", features=["async"] }
+containerd-shim = { git="https://github.com/kuasar-io/rust-extensions.git", features=["async"] }
+runc = { git="https://github.com/kuasar-io/rust-extensions.git", features=["async"] }

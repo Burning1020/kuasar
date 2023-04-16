@@ -287,11 +287,9 @@ where
                 // Remove container from sandbox struct.
                 T::cleanup_connection(container_data.io.clone()).await;
                 sandbox_guard.delete_container_data(&req.id);
-            } else {
-                if let Ok(process_data) = container_data.get_process_data(&req.exec_id) {
-                    T::cleanup_connection(process_data.io.clone()).await;
-                    container_data.delete_process_data(&req.exec_id)
-                }
+            } else if let Ok(process_data) = container_data.get_process_data(&req.exec_id) {
+                T::cleanup_connection(process_data.io.clone()).await;
+                container_data.delete_process_data(&req.exec_id)
             }
         }
 

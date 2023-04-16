@@ -55,7 +55,7 @@ where
         &self,
         sandbox: &mut KuasarSandbox<T>,
     ) -> containerd_sandbox::error::Result<()> {
-        let container = sandbox.container(&*self.container_id).await?;
+        let container = sandbox.container(&self.container_id).await?;
         let bundle = container.data.bundle.to_string();
         for proc in &container.processes {
             if proc.id == self.proc.id {
@@ -66,9 +66,9 @@ where
         if let Some(io) = &self.proc.io {
             let mut io_devices = vec![];
             // TODO what if it is not named pipe
-            let stdin = attach_pipe(&*io.stdin, sandbox, &mut io_devices).await?;
-            let stdout = attach_pipe(&*io.stdout, sandbox, &mut io_devices).await?;
-            let stderr = attach_pipe(&*io.stderr, sandbox, &mut io_devices).await?;
+            let stdin = attach_pipe(&io.stdin, sandbox, &mut io_devices).await?;
+            let stdout = attach_pipe(&io.stdout, sandbox, &mut io_devices).await?;
+            let stderr = attach_pipe(&io.stderr, sandbox, &mut io_devices).await?;
             new_proc.data.io = Some(Io {
                 stdin,
                 stdout,
@@ -82,9 +82,9 @@ where
                 "{}/{}-{}-{}",
                 bundle, IO_FILE_PREFIX, self.container_id, self.proc.id
             );
-            write_file_atomic(io_file_path, &*io_str).await?;
+            write_file_atomic(io_file_path, &io_str).await?;
         }
-        let container = sandbox.container_mut(&*self.container_id)?;
+        let container = sandbox.container_mut(&self.container_id)?;
         container.processes.push(new_proc);
         Ok(())
     }
@@ -93,7 +93,7 @@ where
         &self,
         sandbox: &mut KuasarSandbox<T>,
     ) -> containerd_sandbox::error::Result<()> {
-        remove_io_devices_for_process(sandbox, &*self.container_id, &*self.proc.id).await?;
+        remove_io_devices_for_process(sandbox, &self.container_id, &self.proc.id).await?;
         if let Ok(c) = sandbox.container_mut(&self.container_id) {
             c.processes.retain(|e| e.id != self.proc.id);
         }
@@ -124,7 +124,7 @@ where
         &self,
         sandbox: &mut KuasarSandbox<T>,
     ) -> containerd_sandbox::error::Result<()> {
-        remove_io_devices_for_process(sandbox, &*self.container_id, &*self.process_id).await?;
+        remove_io_devices_for_process(sandbox, &self.container_id, &self.process_id).await?;
         if let Ok(c) = sandbox.container_mut(&self.container_id) {
             c.processes.retain(|e| e.id != self.process_id);
         }
@@ -161,7 +161,7 @@ async fn remove_io_devices_for_process<T: VM + Sync + Send>(
         }
     }
     for device_id in io_devices {
-        sandbox.vm.hot_detach(&*device_id).await.unwrap_or_default();
+        sandbox.vm.hot_detach(&device_id).await.unwrap_or_default();
     }
     let io_file_path = format!(
         "{}/{}-{}-{}",

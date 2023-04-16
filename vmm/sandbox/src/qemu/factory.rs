@@ -60,7 +60,7 @@ impl VMFactory for QemuVMFactory {
         s: &SandboxOption,
     ) -> containerd_sandbox::error::Result<Self::VM> {
         let netns = get_netns(&s.sandbox);
-        let mut vm = QemuVM::new(id, &*netns, &*s.base_dir);
+        let mut vm = QemuVM::new(id, &netns, &s.base_dir);
         vm.config = self.default_config.to_qemu_config().await?;
         vm.config.uuid = Uuid::new_v4().to_string();
         vm.config.name = format!("sandbox-{}", id);
@@ -104,7 +104,7 @@ impl VMFactory for QemuVMFactory {
         let console = CharDevice::new_socket(
             "console0",
             "charconsole0",
-            &*vm.console_socket,
+            &vm.console_socket,
             VIRT_CONSOLE_DRIVER,
             None,
         );
@@ -113,7 +113,7 @@ impl VMFactory for QemuVMFactory {
         // set virtio-rng device
         if !self.default_config.entropy_source.is_empty() {
             let rng_device =
-                VirtioRngDevice::new("rng0", &*self.default_config.entropy_source, Transport::Pci);
+                VirtioRngDevice::new("rng0", &self.default_config.entropy_source, Transport::Pci);
             vm.attach_device(rng_device);
         }
 
@@ -152,7 +152,7 @@ impl VMFactory for QemuVMFactory {
                 };
                 let virtio_9p = Virtio9PDevice::new(
                     "extra-9p-kuasar",
-                    &*share_fs_path,
+                    &share_fs_path,
                     "kuasar",
                     self.default_config.virtio_9p_direct_io,
                     multidevs,

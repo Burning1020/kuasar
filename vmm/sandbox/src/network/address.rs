@@ -52,10 +52,10 @@ pub struct IpNet {
 
 impl From<String> for IpNet {
     fn from(s: String) -> Self {
-        let sp: Vec<&str> = s.split("/").collect();
+        let sp: Vec<&str> = s.split('/').collect();
         let mut ip = IpAddr::from_str("0.0.0.0").unwrap();
         let mut prefix_len = 32u8;
-        if sp.len() >= 1 {
+        if !sp.is_empty() {
             if let Ok(i) = IpAddr::from_str(sp[0]) {
                 ip = i;
             }
@@ -77,25 +77,25 @@ impl Into<String> for IpNet {
 
 impl IpNet {
     pub fn new(ip: IpAddr, prefix_len: u8) -> Self {
-        return Self { ip, prefix_len };
+        Self { ip, prefix_len }
     }
 
     pub fn addr(&self) -> &IpAddr {
-        return &self.ip;
+        &self.ip
     }
 
     pub fn addr_string(&self) -> String {
-        return self.ip.to_string();
+        self.ip.to_string()
     }
 
     pub fn netmask(&self) -> IpAddr {
-        return if self.ip.is_ipv6() {
+        if self.ip.is_ipv6() {
             let mask = Ipv6Addr::from(self.netmask_u128());
             IpAddr::from(mask)
         } else {
             let mask = Ipv4Addr::from(self.netmask_32());
             IpAddr::from(mask)
-        };
+        }
     }
 
     fn netmask_32(&self) -> u32 {
@@ -119,16 +119,16 @@ pub struct MacAddress(pub(crate) Vec<u8>);
 impl From<String> for MacAddress {
     fn from(s: String) -> Self {
         Self(
-            s.split(":")
+            s.split(':')
                 .map(|x| u8::from_str_radix(x, 16).unwrap_or_default())
                 .collect(),
         )
     }
 }
 
-impl Into<String> for MacAddress {
-    fn into(self) -> String {
-        self.to_string()
+impl From<MacAddress> for String {
+    fn from(val: MacAddress) -> Self {
+        val.to_string()
     }
 }
 
@@ -159,5 +159,5 @@ pub fn convert_to_ip_address(addr: Vec<u8>) -> Result<IpAddr> {
         let address = IpAddr::from(*arr);
         return Ok(address);
     }
-    return Err(anyhow!("ip address vec has length {}", addr.len()).into());
+    Err(anyhow!("ip address vec has length {}", addr.len()).into())
 }

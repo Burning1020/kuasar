@@ -546,6 +546,6 @@ impl VsockIo {
                 .map_err(io_error!(e, "failed to accept"))?;
             vio.stream = Some(stream);
         }
-        return Ok(vio);
+        Ok(vio)
     }
 }

@@ -15,9 +15,7 @@ limitations under the License.
 */
 
 use futures_util::StreamExt;
-use netlink_packet_core::{
-    NetlinkMessage, NetlinkPayload, NLM_F_ACK, NLM_F_CREATE, NLM_F_EXCL, NLM_F_REQUEST,
-};
+use netlink_packet_core::{NetlinkMessage, NLM_F_ACK, NLM_F_CREATE, NLM_F_EXCL, NLM_F_REQUEST};
 use netlink_packet_route::{RtnlMessage, TcMessage};
 use rtnetlink::{try_nl, Error, Handle};
 

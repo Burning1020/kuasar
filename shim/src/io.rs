@@ -32,7 +32,10 @@ use tokio::{
     sync::Mutex,
 };
 
-use crate::client::{uds_task_client, vsock_task_client, HVSOCK_PREFIX};
+use crate::{
+    client::{uds_task_client, vsock_task_client, HVSOCK_PREFIX},
+    sandbox::{VMM_SANDBOXER_SOCKET_PATH, WASM_SANDBOXER_SOCKET_PATH},
+};
 
 lazy_static! {
     static ref PORTMAP: Mutex<HashSet<i32>> = Mutex::new(HashSet::new());
@@ -148,6 +151,8 @@ pub trait ContainerIoTransport: Sync + Send + Default + Clone {
         terminal: bool,
     ) -> Result<Self>;
 
+    fn sandboxer_addr() -> String;
+
     async fn copy(&self) -> Result<()>;
 
     fn container_in(&self) -> String;
@@ -195,6 +200,10 @@ impl ContainerIoTransport for UdsTransport {
                 terminal,
             },
         })
+    }
+
+    fn sandboxer_addr() -> String {
+        WASM_SANDBOXER_SOCKET_PATH.to_string()
     }
 
     async fn copy(&self) -> Result<()> {
@@ -263,6 +272,10 @@ impl ContainerIoTransport for VSockTransport {
                 terminal,
             },
         })
+    }
+
+    fn sandboxer_addr() -> String {
+        VMM_SANDBOXER_SOCKET_PATH.to_string()
     }
 
     async fn copy(&self) -> Result<()> {

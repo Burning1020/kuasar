@@ -1,15 +1,16 @@
 [package]
-edition = "2021"
 name = "containerd-shim-kuasar-v2"
 version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 
 [dependencies]
 async-trait = "0.1"
-containerd-sandbox = {git = ""}
-containerd-shim = {git = "", features = ["sandbox"]}
+containerd-sandbox = {git = "https://github.com/kuasar-io/rust-extensions.git"}
+containerd-shim = {git = "https://github.com/kuasar-io/rust-extensions.git", features = ["sandbox"]}
 lazy_static = "1.4.0"
 log = "0.4"
 nix = "0.24.1"

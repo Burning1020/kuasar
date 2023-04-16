@@ -19,7 +19,7 @@ use containerd_sandbox::SandboxOption;
 use crate::{
     cloud_hypervisor::{
         config::CloudHypervisorVMConfig,
-        devices::{block::Disk, console::Console, fs::Fs, pmem::Pmem, rng::Rng, vsock::Vsock},
+        devices::{console::Console, fs::Fs, pmem::Pmem, rng::Rng, vsock::Vsock},
         CloudHypervisorVM,
     },
     utils::get_netns,
@@ -45,7 +45,7 @@ impl VMFactory for CloudHypervisorVMFactory {
         s: &SandboxOption,
     ) -> containerd_sandbox::error::Result<Self::VM> {
         let netns = get_netns(&s.sandbox);
-        let mut vm = CloudHypervisorVM::new(id, &*netns, &*s.base_dir, &self.vm_config);
+        let mut vm = CloudHypervisorVM::new(id, &netns, &s.base_dir, &self.vm_config);
 
         // add image as a disk
         if !self.vm_config.common.image_path.is_empty() {
@@ -75,7 +75,7 @@ impl VMFactory for CloudHypervisorVMFactory {
 
         // add virtio-fs device
         if !vm.virtiofsd_config.socket_path.is_empty() {
-            let fs = Fs::new("fs", &*vm.virtiofsd_config.socket_path, "kuasar");
+            let fs = Fs::new("fs", &vm.virtiofsd_config.socket_path, "kuasar");
             vm.add_device(fs);
         }
 

@@ -114,7 +114,7 @@ async fn connect_to_unix_socket(address: &str) -> Result<RawFd> {
 
 async fn connect_to_vsocket(address: &str) -> Result<RawFd> {
     let (cid, port) = {
-        let v: Vec<String> = address.split(":").map(String::from).collect();
+        let v: Vec<String> = address.split(':').map(String::from).collect();
         if v.len() < 2 {
             return Err(anyhow!("vsock address {} should not less than 2", address).into());
         }
@@ -152,7 +152,7 @@ async fn connect_to_vsocket(address: &str) -> Result<RawFd> {
 
 async fn connect_to_hvsocket(address: &str) -> Result<RawFd> {
     let (addr, port) = {
-        let v: Vec<&str> = address.split(":").collect();
+        let v: Vec<&str> = address.split(':').collect();
         if v.len() < 2 {
             return Err(anyhow!("hvsock address {} should not less than 2", address).into());
         }
@@ -166,7 +166,7 @@ async fn connect_to_hvsocket(address: &str) -> Result<RawFd> {
             Ok(_) => {
                 let mut buf = [0; 4096];
                 match stream.read(&mut buf).await {
-                    Ok(0) => Err(anyhow!("stream closed")).into(),
+                    Ok(0) => Err(anyhow!("stream closed")),
                     Ok(n) => {
                         if String::from_utf8(buf[..n].to_vec())
                             .unwrap_or_default()
@@ -174,18 +174,16 @@ async fn connect_to_hvsocket(address: &str) -> Result<RawFd> {
                         {
                             return Ok(stream.into_std()?.into_raw_fd());
                         }
-                        Err(anyhow!("failed to connect")).into()
+                        Err(anyhow!("failed to connect"))
                     }
                     Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        Err(anyhow!("{}", e)).into()
+                        Err(anyhow!("{}", e))
                     }
-                    Err(e) => Err(anyhow!("failed to read from hvsock: {}", e).into()),
+                    Err(e) => Err(anyhow!("failed to read from hvsock: {}", e)),
                 }
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                Err(anyhow!("{}", e)).into()
-            }
-            Err(e) => Err(anyhow!("failed to write CONNECT to hvsock: {}", e).into()),
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => Err(anyhow!("{}", e)),
+            Err(e) => Err(anyhow!("failed to write CONNECT to hvsock: {}", e)),
         }
         .map_err(Error::Other)
     };
@@ -197,7 +195,7 @@ async fn connect_to_hvsocket(address: &str) -> Result<RawFd> {
 
 pub fn unix_sock(r#abstract: bool, socket_path: &str) -> Result<UnixAddr> {
     let sockaddr_u = if r#abstract {
-        let sockaddr_h = socket_path.to_owned() + &"\x00".to_string();
+        let sockaddr_h = socket_path.to_owned() + "\x00";
         UnixAddr::new_abstract(sockaddr_h.as_bytes())
     } else {
         UnixAddr::new(socket_path)
@@ -222,7 +220,7 @@ async fn do_check_agent(client: &SandboxServiceClient, timeout: u64) {
     let req = CheckRequest::new();
     let duration = Duration::from_secs(timeout).as_nanos() as i64;
     loop {
-        if let Ok(_) = client.check(with_timeout(duration), &req).await {
+        if client.check(with_timeout(duration), &req).await.is_ok() {
             return;
         };
     }
@@ -230,7 +228,7 @@ async fn do_check_agent(client: &SandboxServiceClient, timeout: u64) {
 
 pub(crate) async fn client_update_interfaces(
     client: &SandboxServiceClient,
-    intfs: &Vec<NetworkInterface>,
+    intfs: &[NetworkInterface],
 ) -> Result<()> {
     let mut req = UpdateInterfacesRequest::new();
     req.interfaces = intfs.iter().map(|x| x.into()).collect();
@@ -247,7 +245,7 @@ pub(crate) async fn client_update_interfaces(
 
 pub(crate) async fn client_update_routes(
     client: &SandboxServiceClient,
-    rts: &Vec<Route>,
+    rts: &[Route],
 ) -> Result<()> {
     let mut req = UpdateRoutesRequest::new();
     req.routes = rts.iter().map(|x| x.into()).collect();

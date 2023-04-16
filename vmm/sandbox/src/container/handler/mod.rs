@@ -191,7 +191,7 @@ where
                 }
             }
             if !exist {
-                handlers.push(Box::new(ProcessRemoveHandler::new(id, &*kp.id)));
+                handlers.push(Box::new(ProcessRemoveHandler::new(id, &kp.id)));
             }
         }
         for proc in options.container.processes {
@@ -279,7 +279,7 @@ mod tests {
         handlers.push(Box::new(MockFailHandler {}));
         let handlers = HandlerChain::from(handlers);
         let mut s = Sandbox { tests: vec![] };
-        handlers.handle(&mut s).await.unwrap();
-        assert!(s.tests.is_empty());
+        let res = handlers.handle(&mut s).await;
+        assert!(res.is_err());
     }
 }

@@ -19,41 +19,49 @@ install bin/containerd /usr/local/bin/containerd
 
 ## Configure containerd
 
-  Refer to the following configuration to modify the configuration file, default path is `/etc/containerd/config.toml`.
+Refer to the following configuration to modify the configuration file, default path is `/etc/containerd/config.toml`.
 
-  + For vmm:
+**Important!!!**: AppArmor feature is not support now, you need update `disable_apparmor = true` in the config file.
 
-  ```toml
-  [proxy_plugins.vmm]
-    type = "sandbox"
-    address = "/run/vmm-sandboxer.sock"
-  [plugins.cri.containerd.runtimes.vmm]
-    runtime_type = "io.containerd.kuasar.v1"
-    sandboxer = "vmm"
-    io_type = "hvsock"
-  ```
++ For vmm:
 
-  + For quark:
+```toml
+...
+[proxy_plugins.vmm]
+  type = "sandbox"
+  address = "/run/vmm-sandboxer.sock"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.vmm]
+  runtime_type = "io.containerd.kuasar.v1"
+  sandboxer = "vmm"
+  io_type = "hvsock"
+...
+```
 
-  ```toml
-  [proxy_plugins.quark]
-    type = "sandbox"
-    address = "/run/quark-sandboxer.sock"
-  [plugins.cri.containerd.runtimes.quark]
-    runtime_type = "io.containerd.quark.v1"
-    sandboxer = "quark"
-  ```
++ For quark:
 
-  + For wasm:
+```toml
+...
+[proxy_plugins.quark]
+  type = "sandbox"
+  address = "/run/quark-sandboxer.sock"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quark]
+  runtime_type = "io.containerd.quark.v1"
+  sandboxer = "quark"
+...
+```
 
-  ```toml
-  [proxy_plugins.wasm]
-    type = "sandbox"
-    address = "/run/wasm-sandboxer.sock"
-  [plugins.cri.containerd.runtimes.wasm]
-    runtime_type = "io.containerd.wasm.v1"
-    sandboxer = "wasm"
-  ```
++ For wasm:
+
+```toml
+...
+[proxy_plugins.wasm]
+  type = "sandbox"
+  address = "/run/wasm-sandboxer.sock"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.wasm]
+  runtime_type = "io.containerd.wasm.v1"
+  sandboxer = "wasm"
+...
+```
 
 ## Run containerd
 

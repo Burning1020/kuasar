@@ -104,7 +104,7 @@ pub async fn cleanup_mounts(base_dir: &str) -> Result<()> {
     for line in mounts.lines() {
         let fields = line.split_whitespace().collect::<Vec<&str>>();
         let path = fields[1];
-        if path.starts_with(&base_dir) {
+        if path.starts_with(base_dir) {
             unmount(path, libc::MNT_DETACH | MNT_NOFOLLOW).unwrap_or_else(|e| {
                 error!("failed to remove {}, err: {}", path, e);
             });
@@ -119,13 +119,13 @@ pub fn unmount(target: &str, flags: i32) -> Result<()> {
         .map_err(|e| anyhow!("failed to umount {}, {}", target, e))?;
     let err = Errno::result(res).map(drop);
     match err {
-        Ok(_) => return Ok(()),
+        Ok(_) => Ok(()),
         Err(e) => {
             if e == Errno::ENOENT {
                 debug!("the umount path {} not exist", target);
                 return Ok(());
             }
-            return Err(anyhow!("failed to umount {}, {}", target, e).into());
+            Err(anyhow!("failed to umount {}, {}", target, e).into())
         }
     }
 }

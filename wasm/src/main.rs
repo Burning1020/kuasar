@@ -41,7 +41,7 @@ async fn main() -> anyhow::Result<()> {
         .filter_level(LevelFilter::Debug)
         .init();
     tokio::spawn(async move {
-        let signals = Signals::new(&[libc::SIGTERM, libc::SIGINT, libc::SIGPIPE, libc::SIGCHLD])
+        let signals = Signals::new([libc::SIGTERM, libc::SIGINT, libc::SIGPIPE, libc::SIGCHLD])
             .expect("new signal failed");
         handle_signals(signals).await;
     });

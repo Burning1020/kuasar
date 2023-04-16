@@ -40,7 +40,6 @@ use crate::{
     network::{Network, NetworkConfig},
     utils::get_resources,
     vm::{Hooks, Recoverable, VMFactory, VM},
-    NAMESPACE_NET,
 };
 
 pub const KUASAR_GUEST_SHARE_DIR: &str = "/run/kuasar/storage/containers/";
@@ -182,7 +181,7 @@ where
         };
 
         // Handle pod network if it has a private network namespace
-        if s.sandbox.netns.len() > 0 {
+        if !s.sandbox.netns.is_empty() {
             // get vcpu for interface queue
             let mut vcpu = 1;
             if let Some(resources) = get_resources(&s.sandbox) {
@@ -306,7 +305,7 @@ where
             None => {}
             Some(c) => {
                 for device_id in c.io_devices {
-                    self.vm.hot_detach(&*device_id).await?;
+                    self.vm.hot_detach(&device_id).await?;
                 }
             }
         }
@@ -403,18 +402,14 @@ where
                 );
             }
         }
-        let container_ids: Vec<String> = self
-            .containers
-            .iter()
-            .map(|(k, _v)| k.to_string())
-            .collect();
+        let container_ids: Vec<String> = self.containers.keys().map(|k| k.to_string()).collect();
         if force {
             for id in container_ids {
-                self.remove_container(&*id).await.unwrap_or_default();
+                self.remove_container(&id).await.unwrap_or_default();
             }
         } else {
             for id in container_ids {
-                self.remove_container(&*id).await?;
+                self.remove_container(&id).await?;
             }
         }
 

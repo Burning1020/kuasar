@@ -55,7 +55,7 @@ pub async fn read_file<P: AsRef<Path>>(filename: P) -> Result<String> {
 }
 
 pub fn get_netns(data: &SandboxData) -> String {
-    return if !data.netns.is_empty() {
+    if !data.netns.is_empty() {
         data.netns.to_string()
     } else if let Some(spec) = &data.spec {
         let mut netns = "".to_string();
@@ -69,7 +69,7 @@ pub fn get_netns(data: &SandboxData) -> String {
         netns
     } else {
         "".to_string()
-    };
+    }
 }
 
 pub fn get_resources(data: &SandboxData) -> Option<&LinuxContainerResources> {
@@ -85,9 +85,7 @@ pub fn get_total_resources(data: &SandboxData) -> Option<LinuxContainerResources
         .as_ref()
         .and_then(|c| c.linux.as_ref())
         .and_then(|l| {
-            if l.resources.is_none() {
-                return None;
-            }
+            l.resources.as_ref()?;
             if l.overhead.is_none() {
                 return l.resources.clone();
             }
@@ -132,8 +130,7 @@ fn merge_resources(
     }
 
     // merge cpuset_cpus, if error happend, log and use resource1
-    let cpuset_cpus = if let Ok(c) = merge_cpusets(&*resource1.cpuset_cpus, &*resource2.cpuset_cpus)
-    {
+    let cpuset_cpus = if let Ok(c) = merge_cpusets(&resource1.cpuset_cpus, &resource2.cpuset_cpus) {
         c
     } else {
         error!(
@@ -144,8 +141,7 @@ fn merge_resources(
     };
 
     // merge cpuset_mems, if error happend, log and use resource1
-    let cpuset_mems = if let Ok(c) = merge_cpusets(&*resource1.cpuset_mems, &*resource2.cpuset_mems)
-    {
+    let cpuset_mems = if let Ok(c) = merge_cpusets(&resource1.cpuset_mems, &resource2.cpuset_mems) {
         c
     } else {
         error!(
@@ -155,7 +151,7 @@ fn merge_resources(
         resource1.cpuset_mems.to_string()
     };
 
-    return LinuxContainerResources {
+    LinuxContainerResources {
         cpu_period: resource1.cpu_period,
         cpu_quota: resource1.cpu_quota
             + resource2.cpu_quota * resource1.cpu_period / resource2.cpu_period,
@@ -168,7 +164,7 @@ fn merge_resources(
         unified,
         memory_swap_limit_in_bytes: resource1.memory_swap_limit_in_bytes
             + resource2.memory_swap_limit_in_bytes,
-    };
+    }
 }
 
 fn merge_cpusets(cpusets1: &str, cpusets2: &str) -> Result<String> {
@@ -191,11 +187,11 @@ fn merge_cpusets(cpusets1: &str, cpusets2: &str) -> Result<String> {
             cpuset_parts.push((*low, *high));
         }
     }
-    return Ok(cpuset_parts
+    Ok(cpuset_parts
         .into_iter()
-        .map(|x| cpuset_tostring(x))
+        .map(cpuset_tostring)
         .collect::<Vec<String>>()
-        .join(","));
+        .join(","))
 }
 
 fn merge_cpuset(base: (u32, u32), delta: (u32, u32)) -> (u32, u32) {
@@ -222,12 +218,12 @@ fn cpuset_intersect(cpuset1: (u32, u32), cpuset2: (u32, u32)) -> bool {
     if cpuset2.0 > cpuset1.1 {
         return false;
     }
-    return true;
+    true
 }
 
 fn cpuset_parts(cpuset: &str) -> Result<Vec<(u32, u32)>> {
     let mut cpuset1_parts = vec![];
-    let c1 = cpuset.split(",");
+    let c1 = cpuset.split(',');
     for ps in c1 {
         cpuset1_parts.push(cpuset_one_part(ps)?);
     }
@@ -235,7 +231,7 @@ fn cpuset_parts(cpuset: &str) -> Result<Vec<(u32, u32)>> {
 }
 
 fn cpuset_one_part(cpuset: &str) -> Result<(u32, u32)> {
-    let parts = cpuset.split("-").collect::<Vec<&str>>();
+    let parts = cpuset.split('-').collect::<Vec<&str>>();
     let low = parts[0]
         .trim()
         .parse::<u32>()
@@ -254,7 +250,7 @@ pub fn cpuset_tostring(cpuset: (u32, u32)) -> String {
     if cpuset.0 == cpuset.1 {
         return cpuset.0.to_string();
     }
-    return format!("{}-{}", cpuset.0, cpuset.1);
+    format!("{}-{}", cpuset.0, cpuset.1)
 }
 
 pub async fn get_host_memory_in_mb() -> Result<u64> {
@@ -348,6 +344,22 @@ pub fn bool_to_on_off(b: &bool) -> String {
     }
 }
 
+pub fn bool_to_socket_server(b: &bool) -> String {
+    if *b {
+        "server".to_string()
+    } else {
+        "".to_string()
+    }
+}
+
+pub fn bool_to_socket_nowait(b: &bool) -> String {
+    if *b {
+        "nowait".to_string()
+    } else {
+        "".to_string()
+    }
+}
+
 pub fn vec_to_string<T: ToString>(v: &[T]) -> String {
     v.iter()
         .map(|x| x.to_string())
@@ -428,11 +440,9 @@ pub fn set_cmd_fd(cmd: &mut Command, fds: Vec<RawFd>) -> Result<()> {
                         eprintln!("failed to call fnctl");
                         exit(127);
                     }
-                } else {
-                    if dup2(src_fd, dest_fd) < 0 {
-                        eprintln!("failed to call dup2");
-                        exit(127);
-                    }
+                } else if dup2(src_fd, dest_fd) < 0 {
+                    eprintln!("failed to call dup2");
+                    exit(127);
                 }
             }
             Ok(())

@@ -157,11 +157,9 @@ mod tests {
         let params = device.to_cmdline_params("-");
         assert!(params
             .iter()
-            .position(|x| x == "tap,id=net1,vhost=on,vhostfds=1:2:3,fds=4:5:6")
-            .is_some());
+            .any(|x| x == "tap,id=net1,vhost=on,vhostfds=1:2:3,fds=4:5:6"));
         assert!(params
             .iter()
-            .position(|x| x == "virtio-net-pci,netdev=net1,vectors=8,mac=a1:b2:c3:d5:f4,mq=on")
-            .is_some());
+            .any(|x| x == "virtio-net-pci,netdev=net1,vectors=8,mac=a1:b2:c3:d5:f4,mq=on"));
     }
 }

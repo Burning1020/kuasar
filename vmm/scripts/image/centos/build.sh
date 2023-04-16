@@ -77,4 +77,16 @@ case "${CONTAINER_RUNTIME}" in
 		;;
 esac
 
-bash -x ${REPO_DIR}/vmm/scripts/image/build_image.sh
+case "$1" in
+	image)
+		bash -x ${REPO_DIR}/vmm/scripts/image/build_image.sh
+		;;
+	initrd)
+		initrd=${INITRD:-"/tmp/kuasar.initrd"}
+		( cd ${ROOTFS_DIR} && find . | cpio -H newc -o | gzip -9 ) > "${initrd}"
+		;;
+	*)
+		echo image type "$1" is not invalid
+		exit 1
+		;;
+esac

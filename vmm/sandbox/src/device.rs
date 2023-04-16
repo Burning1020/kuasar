@@ -74,6 +74,17 @@ pub struct Bus {
     pub(crate) slots: Vec<Slot>,
 }
 
+impl Default for Bus {
+    fn default() -> Bus {
+        Bus {
+            r#type: BusType::PCI,
+            id: Default::default(),
+            bus_addr: Default::default(),
+            slots: Default::default(),
+        }
+    }
+}
+
 impl Bus {
     pub fn empty_slot(&self) -> Option<usize> {
         for (index, s) in self.slots.iter().enumerate() {
@@ -193,6 +204,7 @@ pub struct BlockDeviceInfo {
 #[derive(Debug, Clone)]
 pub struct TapDeviceInfo {
     pub id: String,
+    pub index: u32,
     pub name: String,
     pub mac_address: String,
     pub fds: Vec<RawFd>,

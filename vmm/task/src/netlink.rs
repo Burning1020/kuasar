@@ -4,6 +4,7 @@
 //
 
 use std::{
+    convert::TryFrom,
     fmt,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     ops::Deref,
@@ -123,18 +124,15 @@ impl Handle {
             // in that case we have to change its name to a temporary name, to avoid name conflict.
             // the temporary name will be changed to the name on the host after updating that interface.
             if link.name() != intf.name.as_str() {
-                let existed_link = self.find_link(LinkFilter::Name(&*intf.name)).await;
-                match existed_link {
-                    Ok(l) => {
-                        let mut request = self.handle.link().set(l.index());
-                        request.message_mut().header = l.header.clone();
-                        request
-                            .name(format!("{}-tmp", l.name()))
-                            .execute()
-                            .await
-                            .map_err(other_error!(e, "failed to execute netlink request"))?;
-                    }
-                    Err(_) => {}
+                let existed_link = self.find_link(LinkFilter::Name(&intf.name)).await;
+                if let Ok(l) = existed_link {
+                    let mut request = self.handle.link().set(l.index());
+                    request.message_mut().header = l.header.clone();
+                    request
+                        .name(format!("{}-tmp", l.name()))
+                        .execute()
+                        .await
+                        .map_err(other_error!(e, "failed to execute netlink request"))?;
                 }
             }
             request

@@ -183,7 +183,7 @@ impl VM for CloudHypervisorVM {
     async fn attach(&mut self, device_info: DeviceInfo) -> Result<()> {
         match device_info {
             DeviceInfo::Block(blk_info) => {
-                let device = Disk::new(&*blk_info.id, &*blk_info.path, blk_info.read_only, true);
+                let device = Disk::new(&blk_info.id, &blk_info.path, blk_info.read_only, true);
                 self.add_device(device);
             }
             DeviceInfo::Tap(tap_info) => {
@@ -231,7 +231,7 @@ impl VM for CloudHypervisorVM {
     }
 
     fn socket_address(&self) -> String {
-        return self.agent_socket.to_string();
+        self.agent_socket.to_string()
     }
 
     async fn wait_channel(&self) -> Option<Receiver<(u32, i128)>> {

@@ -39,7 +39,7 @@ pub(crate) const MACHINE_TYPE_CCW_VIRTIO: &str = "s390-ccw-virtio";
 
 #[cfg(target_arch = "x86_64")]
 const DEFAULT_QEMU_PATH: &str = "/usr/bin/qemu-system-x86_64";
-#[cfg(target_arch = "arm64")]
+#[cfg(target_arch = "aarch64")]
 const DEFAULT_QEMU_PATH: &str = "/usr/bin/qemu-system-aarch64";
 
 #[cfg(target_arch = "x86_64")]
@@ -254,7 +254,7 @@ pub struct QmpSocket {
 impl ToCmdLineParams for QmpSocket {
     fn to_cmdline_params(&self, hyphen: &str) -> Vec<String> {
         vec![
-            format!("{}{}", hyphen, self.param_key.to_string()),
+            format!("{}{}", hyphen, self.param_key),
             format!(
                 "{}:{},server={},wait={}",
                 self.r#type,

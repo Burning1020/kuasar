@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use containerd_sandbox::error::{Error, Result};
+use containerd_sandbox::error::Result;
 
 use crate::{
     cloud_hypervisor::CloudHypervisorVM, sandbox::KuasarSandbox, utils::get_resources, vm::Hooks,

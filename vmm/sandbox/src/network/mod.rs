@@ -132,25 +132,15 @@ impl Network {
         intfs
             .into_iter()
             .filter(|intf| match intf.r#type {
-                LinkType::Veth => {
-                    return true;
-                }
-                LinkType::VhostUser(_) => {
-                    return true;
-                }
-                LinkType::Physical(_, _) => {
-                    return true;
-                }
-                LinkType::Tap => {
-                    return true;
-                }
+                LinkType::Veth => true,
+                LinkType::VhostUser(_) => true,
+                LinkType::Physical(_, _) => true,
+                LinkType::Tap => true,
                 LinkType::Loopback => {
                     // do we have to drop loopback?
-                    return true;
+                    true
                 }
-                _ => {
-                    return false;
-                }
+                _ => false,
             })
             .collect::<Vec<NetworkInterface>>()
     }
@@ -185,22 +175,22 @@ where
 }
 
 pub(crate) async fn create_netlink_handle(netns: &str) -> Result<Handle> {
-    let (connection, handle, _) = if netns.len() == 0 {
+    let (connection, handle, _) = if netns.is_empty() {
         new_connection()?
     } else {
-        run_in_new_netns(&*netns, move || new_connection()).await??
+        run_in_new_netns(netns, new_connection).await??
     };
     tokio::spawn(connection);
-    return Ok(handle);
+    Ok(handle)
 }
 
 pub async fn execute_in_netns(netns: &str, mut cmd: std::process::Command) -> Result<String> {
-    let output = if netns.len() > 0 {
-        run_in_new_netns(&*netns, move || cmd.output()).await?
+    let output = if !netns.is_empty() {
+        run_in_new_netns(netns, move || cmd.output()).await?
     } else {
         cmd.output()
     }?;
-    return if !output.status.success() {
+    if !output.status.success() {
         Err(anyhow!(
             "failed to execute command, command return {:?}, stdout: {}, stderr: {}",
             output.status.code(),
@@ -212,7 +202,7 @@ pub async fn execute_in_netns(netns: &str, mut cmd: std::process::Command) -> Re
         let stdout = String::from_utf8(output.stdout)
             .map_err(|e| anyhow!("failed to execute command: {}", e))?;
         Ok(stdout)
-    };
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

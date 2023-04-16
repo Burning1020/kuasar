@@ -246,7 +246,7 @@ pub fn mount(
     // mount with non-propagation first, or remount with changed data
     let oflags = flags.bitand(PROPAGATION_TYPES.not());
     let zero: MsFlags = MsFlags::from_bits(0).unwrap();
-    if flags.bitand(MsFlags::MS_REMOUNT).eq(&zero) || data != None {
+    if flags.bitand(MsFlags::MS_REMOUNT).eq(&zero) || data.is_some() {
         nix::mount::mount(source, target, fs_type, oflags, data)
             .map_err(|e| anyhow!("failed to mount {:?} to {}, err: {}", source, target, e))?
     }

@@ -106,7 +106,7 @@ pub fn proc_macro_derive_params(item: TokenStream) -> TokenStream {
                                                     panic!("the param \"{}\" should be included in the params", p.value());
                                                 }
                                             } else {
-                                                panic!("param {:?} is empty", m);
+                                                panic!("param {m:?} is empty");
                                             }
                                         }
                                         NestedMeta::Meta(NameValue(m)) if m.path.is_ident("key") => {
@@ -451,7 +451,7 @@ fn parse_litstr_into<T: Parse>(l: &syn::LitStr) -> T {
     let res = syn::parse_str(&l.value()).and_then(|t| syn::parse2(t));
     match res {
         Ok(ex) => ex,
-        Err(e) => panic!("failed to parse the predicate {:?}, err: {}", l, e),
+        Err(e) => panic!("failed to parse the predicate {l:?}, err: {e}"),
     }
 }
 

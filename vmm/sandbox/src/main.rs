@@ -16,8 +16,11 @@ limitations under the License.
 
 use std::path::Path;
 
+use log::info;
+
 use crate::{
     config::Config,
+    kata_config::KataConfig,
     sandbox::{KuasarSandbox, KuasarSandboxer},
 };
 
@@ -41,17 +44,31 @@ macro_rules! cfg_cloud_hypervisor {
     }
 }
 
+macro_rules! cfg_stratovirt {
+    ($($item:item)*) => {
+        $(
+            #[cfg(feature = "stratovirt")]
+            #[cfg_attr(docsrs, doc(cfg(feature = "stratovirt")))]
+            $item
+        )*
+    }
+}
+
 cfg_qemu! {
     use crate::qemu::factory::QemuVMFactory;
     use crate::qemu::hooks::QemuHooks;
-    use crate::kata_config::KataConfig;
 }
 
 cfg_cloud_hypervisor! {
     use crate::cloud_hypervisor::config::CloudHypervisorVMConfig;
     use crate::cloud_hypervisor::factory::CloudHypervisorVMFactory;
     use crate::cloud_hypervisor::hooks::CloudHypervisorHooks;
-    use crate::sandbox::SandboxConfig;
+}
+
+cfg_stratovirt! {
+    use crate::stratovirt::config::StratoVirtVMConfig;
+    use crate::stratovirt::factory::StratoVirtVMFactory;
+    use crate::stratovirt::hooks::StratoVirtHooks;
 }
 
 #[macro_use]
@@ -68,6 +85,9 @@ mod vm;
 
 #[cfg(feature = "qemu")]
 mod qemu;
+
+#[cfg(feature = "stratovirt")]
+mod stratovirt;
 
 mod client;
 #[cfg(feature = "cloud_hypervisor")]
@@ -104,6 +124,33 @@ async fn main() -> anyhow::Result<()> {
         KuasarSandboxer::new(sandbox_config, vmm_config, hooks)
     };
 
+    #[cfg(feature = "stratovirt")]
+    let sandboxer: KuasarSandboxer<StratoVirtVMFactory, StratoVirtHooks> = {
+        let os_args: Vec<_> = std::env::args_os().collect();
+        let mut config_path = "/var/lib/kuasar/config_stratovirt.toml".to_string();
+        let mut dir = None;
+        for i in 0..os_args.len() {
+            if os_args[i].to_str().unwrap() == "--config" {
+                config_path = os_args[i + 1].to_str().unwrap().to_string()
+            }
+            if os_args[i].to_str().unwrap() == "--dir" {
+                let dir_path = os_args[i + 1].to_str().unwrap().to_string();
+                if !Path::new(&dir_path).exists() {
+                    tokio::fs::create_dir_all(&dir_path).await.unwrap();
+                }
+                dir = Some(dir_path);
+            }
+        }
+        let path = Path::new(&config_path);
+        let config: Config<StratoVirtVMConfig> = if path.exists() {
+            Config::parse(path).await?
+        } else {
+            panic!("config file {} not exist", config_path);
+        };
+        let hooks = StratoVirtHooks::new(config.hypervisor.clone());
+        KuasarSandboxer::new(config.sandbox, config.hypervisor, hooks)
+    };
+
     #[cfg(feature = "cloud_hypervisor")]
     let sandboxer: KuasarSandboxer<CloudHypervisorVMFactory, CloudHypervisorHooks> = {
         let os_args: Vec<_> = std::env::args_os().collect();
@@ -115,7 +162,11 @@ async fn main() -> anyhow::Result<()> {
                 config_path = os_args[i + 1].to_str().unwrap().to_string()
             }
             if os_args[i].to_str().unwrap() == "--dir" {
-                dir = Some(os_args[i + 1].to_str().unwrap().to_string());
+                let dir_path = os_args[i + 1].to_str().unwrap().to_string();
+                if !Path::new(&dir_path).exists() {
+                    tokio::fs::create_dir_all(&dir_path).await.unwrap();
+                }
+                dir = Some(dir_path);
             }
         }
         let path = Path::new(&config_path);
@@ -132,7 +183,7 @@ async fn main() -> anyhow::Result<()> {
         s
     };
 
-    #[cfg(any(feature = "cloud_hypervisor", feature = "qemu"))]
+    #[cfg(any(feature = "cloud_hypervisor", feature = "qemu", feature = "stratovirt"))]
     containerd_sandbox::run("kuasar-sandboxer", sandboxer)
         .await
         .unwrap();

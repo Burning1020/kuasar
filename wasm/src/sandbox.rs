@@ -187,8 +187,7 @@ impl Sandbox for WasmSandbox {
 
     async fn container(&self, id: &str) -> Result<&Self::Container> {
         return self.containers.get(id).ok_or(Error::NotFound(format!(
-            "failed to find container by id {}",
-            id
+            "failed to find container by id {id}"
         )));
     }
 
@@ -214,7 +213,7 @@ impl Sandbox for WasmSandbox {
     }
 
     fn get_data(&self) -> Result<SandboxData> {
-        return Ok(self.data.clone());
+        Ok(self.data.clone())
     }
 }
 

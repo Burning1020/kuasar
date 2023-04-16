@@ -24,14 +24,14 @@ fn main() {
 
     Codegen::new()
         .out_dir("src/api")
-        .inputs(&protos)
+        .inputs(protos)
         .include("src/protos")
         .rust_protobuf()
         .customize(Customize {
             async_all: true,
             ..Default::default()
         })
-        .rust_protobuf_customize(ProtobufCustomize::default().gen_mod_rs(false).clone())
+        .rust_protobuf_customize(ProtobufCustomize::default().gen_mod_rs(false))
         .run()
         .expect("Gen protos code failed");
 }

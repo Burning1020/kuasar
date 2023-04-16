@@ -1,3 +1,4 @@
+[sandbox]
 [hypervisor]
 path = "/usr/local/bin/cloud-hypervisor"
 vcpus = 1

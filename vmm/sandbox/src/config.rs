@@ -34,7 +34,7 @@ impl<T: DeserializeOwned> Config<T> {
     pub async fn parse<P: AsRef<Path>>(path: P) -> error::Result<Self> {
         let toml_str = read_to_string(&path).await?;
         let conf: Self = toml::from_str(&toml_str)
-            .map_err(|e| anyhow!("failed to parse kuasar clh config {}", e))?;
+            .map_err(|e| anyhow!("failed to parse kuasar sandboxer config {}", e))?;
         Ok(conf)
     }
 }

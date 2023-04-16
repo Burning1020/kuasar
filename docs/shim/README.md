@@ -20,6 +20,11 @@ make all
 make install
 ```
 
+## Run sandboxer
+
+Shim starts a sandbox via Sandbox API of sandboxer, therefore shim needs to know about socket address that sandboxer is listening.
+Currently, we set a fixed address `/run/vmm-sandboxer.sock` and `/run/wasm-sandboxer.sock` for shim, please make sure these sandboxers start with a args `--listen`.
+
 ## Install containerd
 
 Download containerd v1.7.0 and ctr base on your machine form official release website: https://github.com/containerd/containerd/releases/tag/v1.7.0.
@@ -31,19 +36,25 @@ Unpack the tar file and install the necessary binaries: `tar Cxzvf /usr/local co
 After that, containerd should know this runtime. Modify containerd configuration toml file on the host,
 the default path is `/etc/containerd/config.toml`:
 
+**Important!!!**: AppArmor feature is not support now, you need update `disable_apparmor = true` in the config file.
+
 For vmm:
 ```toml
-        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kuasar-vmm]
-runtime_type = "io.containerd.kuasar-vmm.v2"
-sandbox_mode = "shim"
+...
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kuasar-vmm]
+  runtime_type = "io.containerd.kuasar-vmm.v2"
+  sandbox_mode = "shim"
+...
 ```
 
 For wasm:
 
 ```toml
-        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kuasar-wasm]
-runtime_type = "io.containerd.kuasar-wasm.v2"
-sandbox_mode = "shim"
+...
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kuasar-wasm]
+  runtime_type = "io.containerd.kuasar-wasm.v2"
+  sandbox_mode = "shim"
+...
 ```
 
 Please Make sure `runtime_type` and `sandbox_mode` is correct.

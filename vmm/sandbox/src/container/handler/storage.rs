@@ -46,7 +46,7 @@ where
     T: VM + Sync + Send,
 {
     async fn handle(&self, sandbox: &mut KuasarSandbox<T>) -> Result<()> {
-        let container = sandbox.container(&*self.container_id).await?;
+        let container = sandbox.container(&self.container_id).await?;
         let mounts = if let Some(c) = &container.data.spec {
             c.mounts.clone()
         } else {
@@ -95,7 +95,7 @@ where
         let storage_str = serde_json::to_string(&storages)
             .map_err(|e| anyhow!("failed to parse storages {}", e))?;
 
-        let container = sandbox.container_mut(&*self.container_id)?;
+        let container = sandbox.container_mut(&self.container_id)?;
         if let Some(spec) = &mut container.data.spec {
             spec.mounts = handled_mounts;
             spec.annotations
@@ -110,14 +110,14 @@ where
             "{}/{}-{}",
             container.data.bundle, STORAGE_FILE_PREFIX, self.container_id
         );
-        write_file_atomic(&storage_file_path, &*storage_str).await?;
+        write_file_atomic(&storage_file_path, &storage_str).await?;
 
         container.data.rootfs = vec![];
         Ok(())
     }
 
     async fn rollback(&self, sandbox: &mut KuasarSandbox<T>) -> Result<()> {
-        let container = sandbox.container(&*self.container_id).await?;
+        let container = sandbox.container(&self.container_id).await?;
         let storage_file_path = format!(
             "{}/{}-{}",
             container.data.bundle, STORAGE_FILE_PREFIX, self.container_id

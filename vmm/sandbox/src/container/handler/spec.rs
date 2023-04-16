@@ -45,7 +45,7 @@ where
         &self,
         sandbox: &mut KuasarSandbox<T>,
     ) -> containerd_sandbox::error::Result<()> {
-        let container = sandbox.container_mut(&*self.container_id)?;
+        let container = sandbox.container_mut(&self.container_id)?;
         let spec = container
             .data
             .spec
@@ -65,8 +65,8 @@ where
             .await
             .map_err(|e| anyhow!("failed to create container bundle, {}", e))?;
         let config_path = format!("{}/{}", bundle, CONFIG_FILE_NAME);
-        write_file_atomic(config_path, &*spec_str).await?;
-        let container = sandbox.container_mut(&*self.container_id)?;
+        write_file_atomic(config_path, &spec_str).await?;
+        let container = sandbox.container_mut(&self.container_id)?;
         container.data.bundle = bundle;
         Ok(())
     }

@@ -186,7 +186,7 @@ impl VM for QemuVM {
                 self.attach_device(device);
             }
             DeviceInfo::Physical(vfio_info) => {
-                let device = VfioDevice::new(&*vfio_info.id, &*vfio_info.bdf);
+                let device = VfioDevice::new(&vfio_info.id, &vfio_info.bdf);
                 self.attach_device(device);
             }
             DeviceInfo::VhostUser(vhost_user_info) => {
@@ -217,7 +217,7 @@ impl VM for QemuVM {
             DeviceInfo::Block(blk_info) => {
                 let device = VirtioBlockDevice::new(
                     "",
-                    &*blk_info.id,
+                    &blk_info.id,
                     Some(blk_info.path),
                     blk_info.read_only,
                 );
@@ -297,7 +297,7 @@ impl VM for QemuVM {
     }
 
     fn socket_address(&self) -> String {
-        return self.agent_socket.to_string();
+        self.agent_socket.to_string()
     }
 
     async fn wait_channel(&self) -> Option<Receiver<(u32, i128)>> {
@@ -390,11 +390,11 @@ impl QemuVM {
         .await
         .map_err(|e| anyhow!("failed to join the qemu startup thread {}", e))??;
         let (tx, rx) = channel((0u32, 0i128));
-        let wait_handle = tokio::spawn(async move {
+        let _wait_handle = tokio::spawn(async move {
             // because the direct child process is not the actual running qemu process,
             // so we have to read pid from the qemu.pid file,
             // NOTE: it is hard to eliminate the race condition when pid reused.
-            if let Ok(pid) = detect_pid(&*pid_file, &*path).await {
+            if let Ok(pid) = detect_pid(&pid_file, &path).await {
                 let wait_result = wait_pid(pid as i32).await;
                 tx.send(wait_result).unwrap_or_default();
             } else {
@@ -413,7 +413,7 @@ impl QemuVM {
             .as_ref()
             .map(|x| x.name.to_string())
             .ok_or_else(|| anyhow!("failed to get qmp socket path"))?;
-        QmpClient::new(&*socket_addr).await
+        QmpClient::new(&socket_addr).await
     }
 
     fn get_client(&self) -> Result<&QmpClient> {
@@ -456,12 +456,12 @@ impl QemuVM {
             .as_ref()
             .ok_or_else(|| anyhow!("qmp client is not init"))?;
         device
-            .execute_hot_attach(client, &bus_type, &*bus_id, index)
+            .execute_hot_attach(client, &bus_type, &bus_id, index)
             .await?;
-        let (bus_addr, index) = match self.attach_to_bus(&*bus_id, index, &*device.id()) {
+        let (bus_addr, index) = match self.attach_to_bus(&bus_id, index, &device.id()) {
             Ok((addr, index)) => (addr, index),
             Err(e) => {
-                self.hot_detach(&*device.id()).await?;
+                self.hot_detach(&device.id()).await?;
                 return Err(e);
             }
         };

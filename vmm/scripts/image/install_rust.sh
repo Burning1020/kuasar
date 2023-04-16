@@ -15,7 +15,9 @@
 
 set -e
 ARCH=${ARCH:-x86_64}
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+# If rustup not exist, install it.
+command -v rustup || curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
 source "$HOME/.cargo/env"
 

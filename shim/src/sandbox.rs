@@ -50,7 +50,8 @@ use crate::{
     service::KuasarServer,
 };
 
-pub(crate) const KUASAR_SOCKET_PATH: &str = "/run/vmm-sandboxer.sock";
+pub(crate) const VMM_SANDBOXER_SOCKET_PATH: &str = "/run/vmm-sandboxer.sock";
+pub(crate) const WASM_SANDBOXER_SOCKET_PATH: &str = "/run/wasm-sandboxer.sock";
 pub(crate) const CRI_SANDBOX_ROOT_PATH: &str =
     "/var/lib/containerd/io.containerd.grpc.v1.cri/sandboxes/";
 pub(crate) const CRI_SANDBOX_STATE_PATH: &str =
@@ -526,7 +527,7 @@ impl<T> SandboxHandler<T> {
         remove_dir_all(sandbox_path).await.unwrap_or_default();
 
         let shm_path = Path::new(CRI_SANDBOX_STATE_PATH).join(&id).join("shm");
-        // detech is 0x2
+        // MNT_DETACH is 0x2
         unmount(shm_path.to_str().unwrap(), 2).map_err(other_error!(e, "umount shm"))?;
 
         remove_dir_all(shm_path).await.unwrap_or_default();

@@ -15,11 +15,11 @@ limitations under the License.
 */
 
 use async_trait::async_trait;
-use containerd_sandbox::error::{Error, Result};
+use containerd_sandbox::error::Result;
 
 use crate::{
-    qemu::{config::QemuVMConfig, devices::QemuDevice, QemuVM},
-    sandbox::{KuasarSandbox, StaticDeviceSpec},
+    qemu::{config::QemuVMConfig, QemuVM},
+    sandbox::KuasarSandbox,
     utils::get_resources,
     vm::Hooks,
 };

@@ -61,4 +61,5 @@ EOF
 
 # Run a container, default runtime is "vmm".
 runtime=${1:-vmm}
-crictl run --runtime="$runtime" container.json pod.json
+crictl -r unix:///run/containerd/containerd.sock run --runtime="$runtime" container.json pod.json
+rm -f container.json pod.json

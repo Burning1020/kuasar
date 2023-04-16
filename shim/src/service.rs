@@ -41,10 +41,7 @@ use tonic::transport::{Endpoint, Uri};
 use tower::service_fn;
 
 use crate::{
-    data::SandboxData,
-    io::ContainerIoTransport,
-    sandbox::{SandboxHandler, KUASAR_SOCKET_PATH},
-    task::TaskHandler,
+    data::SandboxData, io::ContainerIoTransport, sandbox::SandboxHandler, task::TaskHandler,
 };
 
 pub struct Service<T> {
@@ -141,7 +138,9 @@ pub struct KuasarServer<T> {
 impl<T: ContainerIoTransport> KuasarServer<T> {
     pub async fn new(id: &str, exit: Arc<ExitSignal>) -> Self {
         let channel = Endpoint::from_static("https://www.kuasar.io")
-            .connect_with_connector(service_fn(|_: Uri| UnixStream::connect(KUASAR_SOCKET_PATH)))
+            .connect_with_connector(service_fn(
+                |_: Uri| UnixStream::connect(T::sandboxer_addr()),
+            ))
             .await
             .expect("sandboxer should be running");
 

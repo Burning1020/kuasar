@@ -16,14 +16,17 @@
 
 use std::{
     collections::HashMap,
+    fs,
     ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not},
     path::Path,
 };
 
 use anyhow::{anyhow, Result};
+use fs::read_to_string;
 use lazy_static::lazy_static;
 use log::debug;
 use nix::{errno::Errno, libc, mount::MsFlags, NixPath};
+use regex::Regex;
 
 pub const MNT_NOFOLLOW: i32 = 0x8;
 pub const MNT_OPTION_MAX_LEN: usize = 4096;
@@ -246,7 +249,7 @@ pub fn mount(
     // mount with non-propagation first, or remount with changed data
     let oflags = flags.bitand(PROPAGATION_TYPES.not());
     let zero: MsFlags = MsFlags::from_bits(0).unwrap();
-    if flags.bitand(MsFlags::MS_REMOUNT).eq(&zero) || data != None {
+    if flags.bitand(MsFlags::MS_REMOUNT).eq(&zero) || data.is_some() {
         nix::mount::mount(source, target, fs_type, oflags, data)
             .map_err(|e| anyhow!("failed to mount {:?} to {}, err: {}", source, target, e))?
     }
@@ -341,4 +344,26 @@ fn parse_options(options: &[String]) -> (MsFlags, Vec<String>) {
         handle(x.to_string());
     });
     (flags, data)
+}
+
+pub fn get_mount_type(mount_point: &str) -> Result<String> {
+    let mount_stats = read_to_string("/proc/self/mountstats")
+        .map_err(|e| anyhow!("failed to open /proc/self/mountstats, err:{}", e))?;
+
+    for line in mount_stats.lines() {
+        let mount_type = match Regex::new(
+            format!("device .+ mounted on {} with fstype (.+)", mount_point).as_str(),
+        )?
+        .captures(line)
+        {
+            Some(c) => c,
+            None => continue,
+        };
+
+        if mount_type.len() > 1 {
+            return Ok(mount_type[1].to_string());
+        }
+    }
+
+    Err(anyhow!("get type for mount point {} failed", mount_point))
 }

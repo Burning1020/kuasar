@@ -209,7 +209,7 @@ impl DeviceMonitor {
             if dev_name.starts_with("vd") && metadata.is_symlink() {
                 let real_path = read_link(entry.path()).unwrap();
                 let real_path = real_path.to_str().unwrap();
-                let real_path_parts: Vec<&str> = real_path.split("/").collect();
+                let real_path_parts: Vec<&str> = real_path.split('/').collect();
                 for part in real_path_parts {
                     if part.starts_with("0000:") {
                         let device = Device {
@@ -345,7 +345,7 @@ pub fn convert_to_scsi_device(event: &Uevent) -> Option<Device> {
             .to_string();
         Some(Device {
             path: format!("{}/{}", SYSTEM_DEV_PATH, &event.devname),
-            addr: scsi_addr.to_string(),
+            addr: scsi_addr,
             r#type: DeviceType::Scsi,
         })
     } else {
@@ -363,7 +363,10 @@ pub fn convert_to_blk_device(event: &Uevent) -> Option<Device> {
         && path_parts[length - 2] == "block"
         && !event.devname.is_empty()
     {
-        let pci_addr = path_parts[length - 4].to_string();
+        let mut pci_addr = path_parts[length - 4].to_string();
+        if path_parts.len() > 5 && path_parts[length - 5].to_string().starts_with("0000:") {
+            pci_addr = path_parts[length - 5].to_string();
+        }
         Some(Device {
             path: format!("{}/{}", SYSTEM_DEV_PATH, &event.devname),
             addr: pci_addr,

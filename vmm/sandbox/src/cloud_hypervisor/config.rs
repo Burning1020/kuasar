@@ -207,7 +207,7 @@ mod tests {
         assert_eq!(params[2], "--cpus");
         assert_eq!(
             params[3],
-            "boot=2,topology=1:1:2:2,affinity=[0@[0-3],1@[4-5,8]],feature=amx"
+            "boot=2,topology=1:1:2:2,affinity=[0@[0-3],1@[4-5,8]],features=amx"
         );
         assert_eq!(params[4], "--memory");
         assert_eq!(
@@ -223,6 +223,7 @@ mod tests {
     #[test]
     fn test_toml() {
         let toml_str = "
+[sandbox]
 [hypervisor]
 path = \"/usr/local/bin/cloud-hypervisor\"
 vcpus = 1
@@ -246,7 +247,7 @@ thread_pool_size = 4
             "/var/lib/kuasar/vmlinux.bin"
         );
         assert_eq!(config.hypervisor.common.vcpus, 1);
-        assert_eq!(config.hypervisor.hugepages, true);
+        assert!(config.hypervisor.hugepages);
         assert_eq!(config.hypervisor.virtiofsd.thread_pool_size, 4);
         assert_eq!(config.hypervisor.virtiofsd.path, "/usr/local/bin/virtiofsd");
     }

@@ -85,9 +85,9 @@ impl ChClient {
                         .map_err(|e| {
                             anyhow!("failed to unmarshal response {}, {}", response_body, e)
                         })?;
-                    return Ok(response.bdf);
+                    Ok(response.bdf)
                 } else {
-                    return Err(anyhow!("no response body from server").into());
+                    Err(anyhow!("no response body from server").into())
                 }
             }
             DeviceInfo::Tap(_) => {

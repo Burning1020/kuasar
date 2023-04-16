@@ -126,7 +126,7 @@ async fn main() {
     std::env::set_var("XDG_RUNTIME_DIR", "/run");
     init_vm_rootfs().await.unwrap();
     let config = TaskConfig::new().await.unwrap();
-    let log_level = LevelFilter::from_str(&*config.log_level).unwrap();
+    let log_level = LevelFilter::from_str(&config.log_level).unwrap();
     env_logger::Builder::from_default_env()
         .format_timestamp_micros()
         .filter_level(log_level)
@@ -161,7 +161,7 @@ async fn main() {
         .expect("failed to create ttrpc server");
     server.start().await.expect("failed to start ttrpc server");
 
-    let signals = Signals::new(&[libc::SIGTERM, libc::SIGINT, libc::SIGPIPE, libc::SIGCHLD])
+    let signals = Signals::new([libc::SIGTERM, libc::SIGINT, libc::SIGPIPE, libc::SIGCHLD])
         .expect("new signal failed");
     info!("Task server successfully started, waiting for exit signal...");
     handle_signals(signals).await;

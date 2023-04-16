@@ -125,7 +125,7 @@ impl HotAttachable for VirtioBlockDevice {
     async fn execute_hot_detach(&self, client: &QmpClient) -> Result<()> {
         debug!("hot detach device {}", self.id);
         let device_id = format!("virtio-{}", self.id());
-        client.delete_device(&*device_id).await?;
+        client.delete_device(&device_id).await?;
         client.execute(self.to_blockdev_del()).await?;
         Ok(())
     }

@@ -113,7 +113,7 @@ impl Default for LinkType {
 
 impl ToString for LinkType {
     fn to_string(&self) -> String {
-        return match &self {
+        match &self {
             LinkType::Unkonwn => "".to_string(),
             LinkType::Bridge => "bridge".to_string(),
             LinkType::Veth => "veth".to_string(),
@@ -129,7 +129,7 @@ impl ToString for LinkType {
             LinkType::Physical(_, _) => "physical".to_string(),
             LinkType::Tap => "tap".to_string(),
             LinkType::Loopback => "loopback".to_string(),
-        };
+        }
     }
 }
 
@@ -139,36 +139,36 @@ impl From<InfoData> for LinkType {
             InfoData::Bridge(_) => return Self::Bridge,
             InfoData::Tun(_) => return Self::Tun,
             InfoData::Vlan(infos) => {
-                while let Some(InfoVlan::Id(i)) = infos.iter().next() {
+                if let Some(InfoVlan::Id(i)) = infos.first() {
                     return Self::Vlan(*i);
                 }
             }
             InfoData::Veth(_) => return LinkType::Veth,
             InfoData::Vxlan(infos) => {
-                while let Some(InfoVxlan::Id(i)) = infos.iter().next() {
+                if let Some(InfoVxlan::Id(i)) = infos.first() {
                     return Self::Vxlan(*i);
                 }
             }
             InfoData::Bond(_) => return Self::Bond,
             InfoData::IpVlan(infos) => {
-                while let Some(InfoIpVlan::Mode(i)) = infos.iter().next() {
+                if let Some(InfoIpVlan::Mode(i)) = infos.first() {
                     return Self::Ipvlan(*i);
                 }
             }
             InfoData::MacVlan(infos) => {
-                while let Some(InfoMacVlan::Mode(i)) = infos.iter().next() {
+                if let Some(InfoMacVlan::Mode(i)) = infos.first() {
                     return Self::Macvlan(*i);
                 }
             }
             InfoData::MacVtap(infos) => {
-                while let Some(InfoMacVtap::Mode(i)) = infos.iter().next() {
+                if let Some(InfoMacVtap::Mode(i)) = infos.first() {
                     return Self::Macvtap(*i);
                 }
             }
             InfoData::IpTun(_) => return Self::Iptun,
             _ => return Self::Unkonwn,
         }
-        return Self::Unkonwn;
+        Self::Unkonwn
     }
 }
 
@@ -215,9 +215,11 @@ impl NetworkInterface {
         queue: u32,
         handle: &Handle,
     ) -> Result<Self> {
-        let mut intf = Self::default();
-        intf.flags = msg.header.flags;
-        intf.index = msg.header.index;
+        let mut intf = NetworkInterface {
+            flags: msg.header.flags,
+            index: msg.header.index,
+            ..Default::default()
+        };
         for nla in msg.nlas.into_iter() {
             use netlink_packet_route::nlas::link::Nla;
             match nla {
@@ -294,8 +296,8 @@ impl NetworkInterface {
                     create_tap_in_netns(netns, &tap_name, self.queue, self.mtu, &handle).await?;
                 tap_intf.add_qdisc_ingress(netns, &handle).await?;
                 self.add_qdisc_ingress(netns, &handle).await?;
-                tap_intf.add_redirect_tc_filter(netns, &*self.name).await?;
-                self.add_redirect_tc_filter(netns, &*tap_intf.name).await?;
+                tap_intf.add_redirect_tc_filter(netns, &self.name).await?;
+                self.add_redirect_tc_filter(netns, &tap_intf.name).await?;
                 self.twin = Some(Box::new(tap_intf));
             }
             LinkType::Physical(bdf, _driver) => {
@@ -315,6 +317,7 @@ impl NetworkInterface {
                         .vm
                         .attach(DeviceInfo::Tap(TapDeviceInfo {
                             id,
+                            index: self.index,
                             name: intf.name.to_string(),
                             mac_address: self.mac_address.to_string(),
                             fds: intf.fds.iter().map(|fd| fd.as_raw_fd()).collect(),
@@ -349,6 +352,7 @@ impl NetworkInterface {
                     .vm
                     .attach(DeviceInfo::Tap(TapDeviceInfo {
                         id,
+                        index: self.index,
                         name: self.name.to_string(),
                         mac_address: self.mac_address.to_string(),
                         fds: vec![],
@@ -362,9 +366,8 @@ impl NetworkInterface {
     }
 
     pub async fn after_detach(&mut self, _netns: &str) -> Result<()> {
-        match &self.r#type {
-            LinkType::Physical(bdf, driver) => bind_device_to_driver(driver, bdf).await?,
-            _ => {}
+        if let LinkType::Physical(bdf, driver) = &self.r#type {
+            bind_device_to_driver(driver, bdf).await?
         }
         Ok(())
     }
@@ -372,7 +375,7 @@ impl NetworkInterface {
     async fn add_qdisc_ingress(&self, netns: &str, _handle: &Handle) -> Result<()> {
         // TODO use netlink to add ingress
         let mut cmd = std::process::Command::new("tc");
-        cmd.args(&["qdisc", "add", "dev", &*self.name, "ingress"]);
+        cmd.args(["qdisc", "add", "dev", &*self.name, "ingress"]);
         execute_in_netns(netns, cmd).await?;
         Ok(())
     }
@@ -380,7 +383,7 @@ impl NetworkInterface {
     async fn add_redirect_tc_filter(&self, netns: &str, dest: &str) -> Result<()> {
         // TODO do this with netlink library
         let mut cmd = std::process::Command::new("tc");
-        cmd.args(&[
+        cmd.args([
             "filter",
             "add",
             "dev",
@@ -470,8 +473,8 @@ async fn create_tap_in_netns(
         .get()
         .match_name(tap_name.to_string())
         .execute();
-    return if let Some(msg) = link.try_next().await.map_err(|e| anyhow!("{}", e))? {
-        let mut tap_intf = NetworkInterface::parse_from_message(msg, netns, queue, &handle).await?;
+    if let Some(msg) = link.try_next().await.map_err(|e| anyhow!("{}", e))? {
+        let mut tap_intf = NetworkInterface::parse_from_message(msg, netns, queue, handle).await?;
         tap_intf.fds = fds;
         tap_intf.queue = queue;
         let link_up = handle.link().set(tap_intf.index).mtu(mtu).up().execute();
@@ -486,7 +489,7 @@ async fn create_tap_in_netns(
             netns
         )
         .into())
-    };
+    }
 }
 
 #[derive(Debug)]
@@ -522,7 +525,7 @@ fn create_tap_device(tap_name: &str, mut queue: u32) -> Result<Vec<OwnedFd>> {
         let tun_file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
-            .mode(0)
+            .mode(0o0)
             .open("/dev/net/tun")
             .map_err(|e| anyhow!("failed to open tun device: {}", e))?;
         unsafe {
@@ -532,7 +535,7 @@ fn create_tap_device(tap_name: &str, mut queue: u32) -> Result<Vec<OwnedFd>> {
         fds.push(OwnedFd::from(tun_file));
     }
     unsafe {
-        ioctl_tun_set_persist(fds[0].as_raw_fd(), &(1 as u64))
+        ioctl_tun_set_persist(fds[0].as_raw_fd(), &1_u64)
             .map_err(|e| anyhow!("failed to do ioctl_tun_set_persist: {}", e))?;
     }
     Ok(fds)
@@ -560,7 +563,7 @@ async fn bind_device_to_driver(driver: &str, bdf: &str) -> Result<()> {
         write_file_async(&unbind_path, bdf).await?;
     }
     let probe_path = "/sys/bus/pci/drivers_probe";
-    write_file_async(&*probe_path, bdf).await?;
+    write_file_async(probe_path, bdf).await?;
     let driver_link = format!("/sys/bus/pci/devices/{}/driver", bdf);
     let driver_path = tokio::fs::read_link(&*driver_link).await?;
 
@@ -604,7 +607,7 @@ mod tests {
 
         // ip tuntap list to show tap device
         let stdout = Command::new("ip")
-            .args(&["tuntap", "list"])
+            .args(["tuntap", "list"])
             .output()
             .expect("failed to show ip tuntap")
             .stdout;
@@ -614,7 +617,7 @@ mod tests {
 
         // ip tuntap del to delete tap device
         Command::new("ip")
-            .args(&["tuntap", "del", tap_name])
+            .args(["tuntap", "del", tap_name])
             .output()
             .expect("failed to delete tap dev");
     }

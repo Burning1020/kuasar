@@ -40,13 +40,13 @@ where
 {
     async fn handle(&self, sandbox: &mut KuasarSandbox<T>) -> Result<()> {
         sandbox
-            .attach_storage(&*self.container_id, &self.mount)
+            .attach_storage(&self.container_id, &self.mount)
             .await
     }
 
     async fn rollback(&self, sandbox: &mut KuasarSandbox<T>) -> Result<()> {
         sandbox
-            .deference_storage(&*self.container_id, &self.mount)
+            .deference_storage(&self.container_id, &self.mount)
             .await
     }
 }

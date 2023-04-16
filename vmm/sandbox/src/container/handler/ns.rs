@@ -44,7 +44,7 @@ where
     T: VM + Sync + Send,
 {
     async fn handle(&self, sandbox: &mut KuasarSandbox<T>) -> Result<()> {
-        let container = sandbox.container_mut(&*self.container_id)?;
+        let container = sandbox.container_mut(&self.container_id)?;
         let spec = if let Some(s) = &mut container.data.spec {
             s
         } else {

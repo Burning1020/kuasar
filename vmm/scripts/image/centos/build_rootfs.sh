@@ -22,16 +22,16 @@ make_vmm_task() {
     # centos 7 install cmake 2.8 by default, has to add epel repo to install cmake3
     . /etc/os-release
     if [ ${VERSION_ID} -le 7 ]; then
-	yum install -y epel-release
-	yum install -y cmake3 make gcc gcc-c++
-	rm -f /usr/bin/cmake
-	ln -s /usr/bin/cmake3 /usr/bin/cmake
+	      yum install -y epel-release
+	      yum install -y cmake3 make gcc gcc-c++
+	      rm -f /usr/bin/cmake
+	      ln -s /usr/bin/cmake3 /usr/bin/cmake
     else
-	# CentOS Linux 8 had reached the End Of Life (EOL) on December 31st, 2021. It means that CentOS 8 will no longer receive development resources from the official CentOS project. After Dec 31st, 2021, if you need to update your CentOS, you need to change the mirrors to vault.centos.org where they will be archived permanently. Alternatively, you may want to upgrade to CentOS Stream.
-	sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
-	sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
-	yum clean all
-	yum install cmake make gcc-c++
+	      # CentOS Linux 8 had reached the End Of Life (EOL) on December 31st, 2021. It means that CentOS 8 will no longer receive development resources from the official CentOS project. After Dec 31st, 2021, if you need to update your CentOS, you need to change the mirrors to vault.centos.org where they will be archived permanently. Alternatively, you may want to upgrade to CentOS Stream.
+	      sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+	      sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+	      yum clean all
+	      yum install cmake make gcc-c++
     fi
 
     # install rust to compile vmm-task
@@ -48,7 +48,7 @@ build_runc() {
     curl -s https://mirror.go-repo.io/centos/go-repo.repo | tee /etc/yum.repos.d/go-repo.repo
     yum install -y golang make
     mkdir -p /tmp/gopath
-    GOPATH=/tmp/gopath go install github.com/opencontainers/runc@latest
+    GOPATH=/tmp/gopath go install github.com/opencontainers/runc@v1.1.6
     cp /tmp/gopath/bin/runc ${repo_dir}/bin/
 }
 
