@@ -12,7 +12,9 @@ This directory supply two shims, `containerd-shim-kuasar-vmm-v2` and `containerd
 The former one will talk to vmm-sandboxer and the later one will talk to wasm-sandboxer.
 
 ## Build
-You need build it from source before use it:
+
+You need build it from source with root user before use it:
+
 ```shell
 git clone https://github.com/kuasar-io/kuasar.git
 cd kuasar/shim
@@ -23,13 +25,16 @@ make install
 ## Run sandboxer
 
 Shim starts a sandbox via Sandbox API of sandboxer, therefore shim needs to know about socket address that sandboxer is listening.
-Currently, we set a fixed address `/run/vmm-sandboxer.sock` and `/run/wasm-sandboxer.sock` for shim, please make sure these sandboxers start with a args `--listen`.
+Currently, we set a fixed address `/run/vmm-sandboxer.sock` and `/run/wasm-sandboxer.sock` for shim, please make sure these sandboxers start with an args `--listen`.
 
 ## Install containerd
 
-Download containerd v1.7.0 and ctr base on your machine form official release website: https://github.com/containerd/containerd/releases/tag/v1.7.0.
+Download containerd v1.7.0 and ctr base on your machine form official release website: https://github.com/containerd/containerd/releases/tag/v1.7.0, and extract it under `/usr/local`:
 
-Unpack the tar file and install the necessary binaries: `tar Cxzvf /usr/local containerd-1.7.0-linux-amd64.tar.gz`
+```shell
+curl -LJO https://github.com/containerd/containerd/releases/download/v1.7.0/containerd-1.7.0-linux-amd64.tar.gz
+tar Cxzvf /usr/local containerd-1.7.0-linux-amd64.tar.gz
+```
 
 ## Configure containerd
 
@@ -40,21 +45,17 @@ the default path is `/etc/containerd/config.toml`:
 
 For vmm:
 ```toml
-...
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kuasar-vmm]
   runtime_type = "io.containerd.kuasar-vmm.v2"
   sandbox_mode = "shim"
-...
 ```
 
 For wasm:
 
 ```toml
-...
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kuasar-wasm]
   runtime_type = "io.containerd.kuasar-wasm.v2"
   sandbox_mode = "shim"
-...
 ```
 
 Please Make sure `runtime_type` and `sandbox_mode` is correct.

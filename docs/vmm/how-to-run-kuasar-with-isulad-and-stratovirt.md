@@ -2,8 +2,10 @@
 ## Requirement
 
 - Prepare a new aarch64 architecture physical server
-- *Optional* - Recommand to install openEuler 23.03 version OS in the server
+- *Optional* - Recommend to install openEuler 23.03 version OS in the server
   - openEuler 23.03 version OS image download link: https://repo.openeuler.org/openEuler-23.03/ISO/
+
+> Note: All of the following commands need to run with root privilege.
 
 ## Build and install StratoVirt
 
@@ -58,7 +60,65 @@ After installation, you will find the required files in the specified path
 
 ## Build and configure iSulad
 
- [iSulad](https://gitee.com/openeuler/iSulad) supports kuasar is in developing, we will update this docuement as soon as possible when everythin is ready.
+[iSulad](https://gitee.com/openeuler/iSulad) supports Kuasar with its dev-sandbox branch at the moment. For building iSulad from scratch, please refer to [iSulad build guide](https://gitee.com/openeuler/iSulad/blob/master/docs/build_docs/guide/build_guide.md). Here we only emphasize the difference of the building steps.
+ 
+### Build LCR
+
+```bash
+$ git clone https://gitee.com/openeuler/lcr.git
+
+$ cd lcr
+
+$ git checkout dev-sandbox
+
+$ mkdir build
+
+$ cd build
+
+$ sudo -E cmake ..
+
+$ sudo -E make -j $(nproc)
+
+$ sudo -E make install
+```
+
+### Build iSulad
+
+```bash
+$ git clone https://gitee.com/openeuler/iSulad.git
+
+$ cd iSulad
+
+$ git checkout dev-sandbox
+
+$ mkdir build
+
+$ cd build
+
+$ sudo -E cmake .. -D ENABLE_SANDBOX=ON -D ENABLE_SHIM_V2=ON
+
+$ sudo make -j
+
+$ sudo -E make install
+```
+
+### Configure iSulad
+Add the following configuration in the iSulad configuration file `/etc/isulad/daemon.json` 
+```json
+...
+    "default-sandboxer": "vmm",
+    "sandboxers": {
+        "vmm": {
+            "address": "/run/vmm-sandboxer.sock",
+            "controller": "proxy",
+            "protocol": "grpc"
+        }
+    },
+    "cri-runtimes": {
+        "vmm": "io.containerd.vmm.v1"
+    },
+...
+```
 
 ## Build and configure Containerd
 
@@ -83,24 +143,22 @@ $ install bin/containerd /usr/bin/containerd
 Add the following sandboxer config in the containerd config file `/etc/containerd/config.toml`
 
 ```toml
-...
 [proxy_plugins]
   [proxy_plugins.vmm]
     type = "sandbox"
     address = "/run/vmm-sandboxer.sock"
 
-[plugins.cri.containerd.runtimes.vmm]
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.vmm]
   runtime_type = "io.containerd.kuasar.v1"
   sandboxer = "vmm"
   io_type = "hvsock"
-...
 ```
 
 ## Configure crictl
 
 ### Install CNI plugin
 
-Install [cni-plugin](https://github.com/containernetworking/plugins/)  which is required by [crictl-tools](https://github.com/kubernetes-sigs/cri-tools) to setup pod network.
+Install [cni-plugin](https://github.com/containernetworking/plugins/)  which is required by [crictl-tools](https://github.com/kubernetes-sigs/cri-tools) to configure pod network.
 
 ```bash
 $ wget https://github.com/containernetworking/plugins/releases/download/v1.2.0/cni-plugins-linux-arm64-v1.2.0.tgz
@@ -122,9 +180,14 @@ rm -f crictl-$VERSION-linux-amd64.tar.gz
 
 create and the crictl config file in the `/etc/crictl.yaml`
 ```bash
-cat /etc/crictl.yaml           
-runtime-endpoint: unix:///var/run/containerd/containerd.sock
-image-endpoint: unix:///var/run/containerd/containerd.sock
+cat /etc/crictl.yaml
+# isulad container engine configuraiton
+runtime-endpoint: unix:///var/run/isulad.sock
+image-endpoint: unix:///var/run/isulad.sock
+
+# containerd container engine configuration
+# runtime-endpoint: unix:///var/run/containerd/containerd.sock
+# image-endpoint: unix:///var/run/containerd/containerd.sock
 timeout: 10
 ```
 
@@ -229,7 +292,7 @@ c11df540f913e       docker.io/library/busybox:latest   2 minutes ago       Runni
 
 ### Test Network Connectivity
 
-Get the `vsock guest-cid`  from stratovirt vm process
+Get the `vsock guest-cid` from stratovirt vm process
 ```bash
 $ ps -ef | grep stratovirt | grep 5cbcf744949d8 
 /usr/bin/stratovirt -name sandbox-5cbcf744949d8500e7159d6bd1e3894211f475549c0be15d9c60d3c502c7ede3 ...
@@ -239,7 +302,7 @@ $ ps -ef | grep stratovirt | grep 5cbcf744949d8
 
 Enter the guest os debug console shell environment:
 ```bash
-# ncat --vosk <guest-cid> <debug-console>
+# ncat --vsock <guest-cid> <debug-console>
 # enter the guest os debug console shell
 $ ncat --vsock 395568061 1025
 

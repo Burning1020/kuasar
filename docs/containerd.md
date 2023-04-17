@@ -9,12 +9,8 @@ Kuasar has make some changes on official containerd v1.7.0 based on commit:`1f23
 ```bash
 git clone https://github.com/kuasar-io/containerd.git
 cd containerd
-make bin/containerd
-install bin/containerd /usr/local/bin/containerd
-
-# Build debug tool `ctr` 
-make bin/ctr
-install bin/containerd /usr/local/bin/containerd
+make
+make install
 ```
 
 ## Configure containerd
@@ -26,7 +22,6 @@ Refer to the following configuration to modify the configuration file, default p
 + For vmm:
 
 ```toml
-...
 [proxy_plugins.vmm]
   type = "sandbox"
   address = "/run/vmm-sandboxer.sock"
@@ -34,33 +29,28 @@ Refer to the following configuration to modify the configuration file, default p
   runtime_type = "io.containerd.kuasar.v1"
   sandboxer = "vmm"
   io_type = "hvsock"
-...
 ```
 
 + For quark:
 
 ```toml
-...
 [proxy_plugins.quark]
   type = "sandbox"
   address = "/run/quark-sandboxer.sock"
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quark]
   runtime_type = "io.containerd.quark.v1"
   sandboxer = "quark"
-...
 ```
 
 + For wasm:
 
 ```toml
-...
 [proxy_plugins.wasm]
   type = "sandbox"
   address = "/run/wasm-sandboxer.sock"
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.wasm]
   runtime_type = "io.containerd.wasm.v1"
   sandboxer = "wasm"
-...
 ```
 
 ## Run containerd

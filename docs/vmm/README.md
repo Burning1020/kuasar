@@ -11,6 +11,8 @@ kuasar should be running on bare metal of x86_64 arch, HostOS should be linux wi
 
 `x86_64-unknown-linux-musl` should be installed to make easy-to-deploy static linked or minimally dynamic linked programs in the building of `vmm-task`.
 
+Build it with root user:
+
 ```sh
 rustup target add x86_64-unknown-linux-musl
 make bin/vmm-sandboxer
@@ -22,7 +24,7 @@ Additionally, kuasar dir should be created: `mkdir -p /var/lib/kuasar`.
 ## Building guest kernel
 Guest kernel should also be linux of 4.8 or higher, with virtio-vsock enabled, make sure [this patch](https://lore.kernel.org/all/20191122070009.5CE442068E@mail.kernel.org/T/) is merged.
 ```
-CONFIG_VSOCKETS=y                            
+CONFIG_VSOCKETS=y
 CONFIG_VSOCKETS_DIAG=y
 CONFIG_VIRTIO_VSOCKETS=y
 CONFIG_VIRTIO_VSOCKETS_COMMON=y

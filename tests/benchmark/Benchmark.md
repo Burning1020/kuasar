@@ -18,20 +18,20 @@ This repository contains all the scripts, source code and data.
   
   - memory overhead:
     
-    Start 1/5/10/20/30/50 pods，measure the Pss of Kuasar's sandboxer process and the total Pss of all `containerd-shim-kata-v2` processes. The Pss is obtaind from the smaps_rollup file under the `/proc` dictionary.
+    Start 1/5/10/20/30/50 pods，measure the Pss of Kuasar's sandboxer process and the total Pss of all `containerd-shim-kata-v2` processes. The Pss is obtained from the smaps_rollup file under the `/proc` dictionary.
     
     Measure three times and take the average value.
   
   - startup time: 
     
-    The container startup time (including pod startup time) measured end-to-end through CRI. The testing is divided into two groups, one launching a single pod and the other launching 30 pods in parrllel. Every group runs 500 times and obtains CDF data.
+    The container startup time (including pod startup time) measured end-to-end through CRI. The testing is divided into two groups, one launching a single pod and the other launching 30 pods in parallel. Every group runs 500 times and obtains CDF data.
 
 ---
 
-## Test Enviroment
+## Test Environment
 
 |                  | version  |
-| ---------------- | -------- |
+|------------------|----------|
 | Contained        | v1.7.0   |
 | Kata             | v2.5.2   |
 | Operation System | centOS 8 |
@@ -94,7 +94,7 @@ We use gnuplot to generate graph.
 
 Make sure that your `.dat` files and `.gpl` scripts are in the same dictionary. Or you can modify the `.gpl` scripts to specify the path and name of the `.dat` files.
 
-Run the `.gpl` script and you will get the PDF file.
+Run the `.gpl` script, and you will get the PDF file.
 
 ![](./img/boot-serial-1000.JPG)
 

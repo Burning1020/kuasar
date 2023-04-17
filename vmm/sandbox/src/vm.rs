@@ -99,8 +99,8 @@ impl Default for HypervisorCommonConfig {
             debug: false,
             vcpus: 1,
             memory_in_mb: 1024,
-            kernel_path: "/var/lib/kuasar/kernel".to_string(),
-            image_path: "/var/lib/kata/kuasar.img".to_string(),
+            kernel_path: "/var/lib/kuasar/vmlinux.bin".to_string(),
+            image_path: "/var/lib/kuasar/kuasar.img".to_string(),
             initrd_path: "".to_string(),
             kernel_params: "".to_string(),
         }

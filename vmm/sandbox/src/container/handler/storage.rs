@@ -66,7 +66,7 @@ where
                     storages.push(storage);
                 }
             }
-            // TODO if kata agent mount shm when startup, then just use the same shm
+            // TODO if vmm-task mount shm when startup, then just use the same shm
             if is_bind_shm(&m) {
                 m.source = "/dev/shm".to_string();
                 m.options.push("rbind".to_string());

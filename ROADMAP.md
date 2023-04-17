@@ -10,6 +10,7 @@
 
 + Support runC container
 + Support Wasmtime
++ Start the process of donating projects to CNCF
 
 ## 2024 H1
 

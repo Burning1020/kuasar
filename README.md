@@ -100,11 +100,11 @@ Since Kuasar is built on top of the Sandbox API, which has already been integrat
 
 ### 5. virtiofsd
 
-MicroVMs like Cloud Hypervisor needs a virtiofsd to share the directories on the host. Please refer to [virtiofsd guide](https://gitlab.com/virtio-fs/virtiofsd#building-from-sources).
+MicroVMs like Cloud Hypervisor needs a virtiofs daemon to share the directories on the host. Please refer to [virtiofsd guide](https://gitlab.com/virtio-fs/virtiofsd).
 
 ## Build from source
 
-Rust 1.67 or higher version is required to compile Kuasar.
+Rust 1.67 or higher version is required to compile Kuasar. Build it with root user:
 
 ```shell
 git clone https://github.com/kuasar-io/kuasar.git

@@ -602,7 +602,7 @@ mod tests {
 
     #[test]
     fn add_and_remove_tap_device() {
-        let tap_name = "test-kata";
+        let tap_name = "test-kuasar";
         let _ = create_tap_device(tap_name, 1).expect("failed to create tap dev");
 
         // ip tuntap list to show tap device

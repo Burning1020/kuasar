@@ -48,7 +48,6 @@ pub async fn get_cgroup_mounts(
     unified_cgroup_hierarchy: bool,
 ) -> containerd_shim::Result<Vec<StaticMount>> {
     // cgroup v2
-    // https://github.com/kata-containers/agent/blob/8c9bbadcd448c9a67690fbe11a860aaacc69813c/agent.go#L1249
     if unified_cgroup_hierarchy {
         return Ok(vec![StaticMount {
             fstype: "cgroup2",
