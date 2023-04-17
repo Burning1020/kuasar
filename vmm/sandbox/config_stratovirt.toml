@@ -3,7 +3,7 @@
 [hypervisor]
 path = "/usr/bin/stratovirt"
 machine_type = "virt,mem-share=on"
-kernel_path = "/var/lib/kuasar/kernel"
+kernel_path = "/var/lib/kuasar/vmlinux.bin"
 image_path = ""
 initrd_path = "/var/lib/kuasar/kuasar.initrd"
 kernel_params = "task.log_level=debug task.sharefs_type=virtiofs"

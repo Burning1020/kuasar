@@ -245,7 +245,7 @@ mod tests {
             "-qmp",
             "unix:/path/to/qmp.sock,server,nowait",
             "-kernel",
-            "/var/lib/kuasar/kernel",
+            "/var/lib/kuasar/vmlinux.bin",
             "-initrd",
             "/var/lib/kuasar/initrd",
             "-append",

@@ -1,5 +1,18 @@
 # Roadmap
 
+| Sandboxer      | Sandbox          | 2023 H1 | 2023 H2 | 2024 H1 |
+|----------------|------------------|---------|---------|---------|
+| **MicroVM**    | Cloud Hypervisor | ¡Ì       |         |         |
+|                | QEMU             | ¡Ì       |         |         |
+|                | StratoVirt       | ¡Ì       |         |         |
+|                | Firecracker      |         |         | ¡Ì       |
+| **App Kernel** | Quark            | ¡Ì       |         |         |
+|                | gVisor           |         |         | ¡Ì       |
+| **Wasm**       | WasmEdge         | ¡Ì       |         |         |
+|                | Wasmtime         |         | ¡Ì       |         |
+| **runC**       | runC             |         | ¡Ì       |         |
+
+
 ## 2023 H1
 
 + Release v0.1
@@ -15,7 +28,7 @@
 ## 2024 H1
 
 + Release v1.0
-+ Support more sandboxes, i.e. Wasmtime, gVisor, Firecracker
++ Support more sandboxes, i.e. gVisor, Firecracker
 + Develop a CLI tool for operation and maintenance.
 
 ## 2024 H2
