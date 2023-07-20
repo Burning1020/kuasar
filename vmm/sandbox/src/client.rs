@@ -21,9 +21,13 @@ use std::{
 
 use anyhow::anyhow;
 use containerd_sandbox::error::{Error, Result};
-use log::error;
+use log::{debug, error, warn};
 use nix::{
-    sys::socket::{connect, socket, AddressFamily, SockFlag, SockType, UnixAddr, VsockAddr},
+    sys::{
+        socket::{connect, socket, AddressFamily, SockFlag, SockType, UnixAddr, VsockAddr},
+        time::TimeValLike,
+    },
+    time::{clock_gettime, ClockId},
     unistd::close,
 };
 use tokio::{
@@ -37,6 +41,8 @@ use vmm_common::api::{sandbox::*, sandbox_ttrpc::SandboxServiceClient};
 use crate::network::{NetworkInterface, Route};
 
 const HVSOCK_RETRY_TIMEOUT: u64 = 10;
+const TIME_SYNC_PERIOD: u64 = 60;
+const TIME_SYNC_TOLERANCE: u64 = 10;
 
 pub(crate) async fn new_sandbox_client(address: &str) -> Result<SandboxServiceClient> {
     let client = new_ttrpc_client(address).await?;
@@ -255,4 +261,53 @@ pub(crate) async fn client_update_routes(
         .await
         .map_err(|e| anyhow!("failed to update routes: {}", e))?;
     Ok(())
+}
+
+pub(crate) async fn client_sync_clock(client: &SandboxServiceClient) {
+    let client = client.clone();
+    let tolerance_nanos = Duration::from_millis(TIME_SYNC_TOLERANCE).as_nanos() as i64;
+    let clock_id = ClockId::from_raw(nix::libc::CLOCK_REALTIME);
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(TIME_SYNC_PERIOD)).await;
+            debug!("sync_clock: start sync clock from host to guest");
+
+            let mut req = SyncClockPacket::new();
+            match clock_gettime(clock_id) {
+                Ok(ts) => req.ClientSendTime = ts.num_nanoseconds(),
+                Err(e) => {
+                    warn!("failed to get current clock: {}", e);
+                    continue;
+                }
+            }
+            match client
+                .sync_clock(with_timeout(Duration::from_secs(1).as_nanos() as i64), &req)
+                .await
+            {
+                Ok(mut p) => {
+                    match clock_gettime(clock_id) {
+                        Ok(ts) => p.ServerArriveTime = ts.num_nanoseconds(),
+                        Err(e) => {
+                            warn!("failed to get current clock: {}", e);
+                            continue;
+                        }
+                    }
+                    p.Delta = ((p.ClientSendTime - p.ClientArriveTime)
+                        + (p.ServerArriveTime - p.ServerSendTime))
+                        / 2;
+                    if p.Delta.abs() > tolerance_nanos {
+                        if let Err(e) = client
+                            .sync_clock(with_timeout(Duration::from_secs(1).as_nanos() as i64), &p)
+                            .await
+                        {
+                            error!("sync clock set delta failed: {:?}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("sync clock get error: {:?}", e);
+                }
+            }
+        }
+    });
 }
