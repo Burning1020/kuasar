@@ -1,0 +1,53 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      # Regex for a version number such as 0.2.1
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+
+  build-and-upload:
+    name: Build and upload
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        paths: [ vmm/sandbox, vmm/task, shim, wasm, quark ]
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v3
+
+      - name: Get the release version from the tag
+        shell: bash
+        run: echo "VERSION=$\{GITHUB_REF#refs/tags/\}" >> $GITHUB_ENV
+
+      - name: Build
+        run: make all
+
+      - name: Build archive
+        shell: bash
+        run: |
+          binary_name="<BINARY_NAME>"
+
+          dirname="$binary_name-$\{\{ env.VERSION \}\}-$\{\{ matrix.target \}\}"
+          mkdir "$dirname"
+          if [ "$\{\{ matrix.os \}\}" = "windows-latest" ]; then
+            mv "target/$\{\{ matrix.target \}\}/release/$binary_name.exe" "$dirname"
+          else
+            mv "target/$\{\{ matrix.target \}\}/release/$binary_name" "$dirname"
+          fi
+
+          if [ "$\{\{ matrix.os \}\}" = "windows-latest" ]; then
+            7z a "$dirname.zip" "$dirname"
+            echo "ASSET=$dirname.zip" >> $GITHUB_ENV
+          else
+            tar -czf "$dirname.tar.gz" "$dirname"
+            echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
+          fi
+
+      - name: Upload the binaries
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            $\{\{ env.ASSET \}\}
