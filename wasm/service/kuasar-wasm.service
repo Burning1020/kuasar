@@ -1,0 +1,18 @@
+[Unit]
+Description=Kuasar Wasm sandboxer daemon process
+After=network.target
+
+[Service]
+Type=simple
+ExecStartPre=-/bin/bash -c 'source /root/.wasmedge/env'
+ExecStart=/usr/local/bin/wasm-sandboxer --listen /run/wasm-sandboxer.sock --dir /run/kuasar-wasm
+ExecReload=/bin/kill -s HUP $MAINPID
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+Delegate=yes
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
+
