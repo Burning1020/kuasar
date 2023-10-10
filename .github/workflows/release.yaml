@@ -89,7 +89,6 @@ jobs:
       - vmm
       - quark
       - wasm
-      - shim
       - containerd
     runs-on: ubuntu-latest
 
