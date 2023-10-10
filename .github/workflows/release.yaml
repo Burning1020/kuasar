@@ -131,6 +131,7 @@ jobs:
           bash ./scripts/build/cargo-vendor.sh
           mkdir -p /tmp/kuasar-$releasever
           cp -r ./* /tmp/kuasar-$releasever
+          mkdir _release
           tar -czvf _release/kuasar-$releasever-vendor.tar.gz -C /tmp/ kuasar-$releasever
       - uses: actions/download-artifact@v3
         with:
@@ -139,9 +140,9 @@ jobs:
         run: |
           releasever=${{ github.ref }}
           releasever="${releasever#refs/tags/}"
-          mkdir _release
-          find _artifacts -type f | xargs -I {} cp {} _release/
-          tar -czvf _release/kuasar-$releasever-linux-amd64.tar.gz -C _release .
+          mkdir _dist
+          find _artifacts -type f | xargs -I {} cp {} _dist/
+          tar -czvf _release/kuasar-$releasever-linux-amd64.tar.gz -C _dist .
       - name: Update Release
         uses: softprops/action-gh-release@v1
         with:
