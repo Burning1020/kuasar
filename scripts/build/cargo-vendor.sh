@@ -32,7 +32,9 @@ for dir in "${directories[@]}"; do
     (cd "$dir" && cargo vendor)
 done
 
-mkdir ../temp
-cp -r ./* ../temp/
-tar -czvf $VENDOR_NAME -C ../temp .
+VENDOR_DIR=${GITHUB_REF:10}-vendor
+mkdir -p /tmp/VENDOR_DIR
+cp -r ./* /tmp/VENDOR_DIR/
+tar -czvf $VENDOR_NAME /tmp/VENDOR_DIR/
+rm -rf /tmp/VENDOR_DIR
 gh release upload $RELEASE_VERSION $VENDOR_NAME

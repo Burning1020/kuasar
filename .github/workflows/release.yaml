@@ -65,22 +65,6 @@ jobs:
         with:
           name: ${{ matrix.features }}
           path: bin/wasm-sandboxer
-  
-  shim:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build shim
-        working-directory: shim
-        run: make all
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: shim
-          path: | 
-            bin/containerd-shim-kuasar-vmm-v2 
-            bin/containerd-shim-kuasar-wasm-v2
 
   containerd:
     runs-on: ubuntu-latest
