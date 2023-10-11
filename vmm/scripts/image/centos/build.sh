@@ -109,7 +109,7 @@ fi
 
 case "$1" in
 image)
-	sudo bash -x ${REPO_DIR}/vmm/scripts/image/build_image.sh
+	bash -x ${REPO_DIR}/vmm/scripts/image/build_image.sh
 	fn_check_result $? "build image failed!"
 	;;
 initrd)

@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build vm image
-        run: sudo make bin/kuasar.img RUNTIME=docker
+        run: make bin/kuasar.img RUNTIME=docker
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -101,7 +101,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build Containerd
-        run: sudo -E ./scripts/build/build-containerd.sh
+        run: ./scripts/build/build-containerd.sh
         shell: bash
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3

@@ -17,7 +17,7 @@ all: vmm quark wasm
 bin/vmm-sandboxer:
 	@cd vmm/sandbox && cargo build --release --features=${HYPERVISOR}
 	@mkdir -p bin && cp vmm/sandbox/target/release/vmm-sandboxer bin/vmm-sandboxer
-	
+
 bin/vmm-task:
 	@cd vmm/task && cargo build --release --target=${ARCH}-unknown-linux-musl
 	@mkdir -p bin && cp vmm/task/target/${ARCH}-unknown-linux-musl/release/vmm-task bin/vmm-task
