@@ -17,11 +17,8 @@ set -e
 
 export PATH="$PATH:/home/runner/.cargo/bin"
 
-gh release create $RELEASE_VERSION --generate-notes
-
 directories=(
     "quark"
-    "shim"
     "vmm/sandbox"
     "vmm/task"
     "vmm/common"
@@ -31,8 +28,3 @@ directories=(
 for dir in "${directories[@]}"; do
     (cd "$dir" && cargo vendor)
 done
-
-mkdir ../temp
-cp -r ./* ../temp/
-tar -czvf $VENDOR_NAME -C ../temp .
-gh release upload $RELEASE_VERSION $VENDOR_NAME

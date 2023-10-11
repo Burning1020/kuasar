@@ -17,7 +17,7 @@ all: vmm quark wasm
 bin/vmm-sandboxer:
 	@cd vmm/sandbox && cargo build --release --features=${HYPERVISOR}
 	@mkdir -p bin && cp vmm/sandbox/target/release/vmm-sandboxer bin/vmm-sandboxer
-	
+
 bin/vmm-task:
 	@cd vmm/task && cargo build --release --target=${ARCH}-unknown-linux-musl
 	@mkdir -p bin && cp vmm/task/target/${ARCH}-unknown-linux-musl/release/vmm-task bin/vmm-task
@@ -28,11 +28,11 @@ bin/vmlinux.bin:
 
 bin/kuasar.img:
 	@bash -x vmm/scripts/image/${GUESTOS_IMAGE}/build.sh image
-	@mkdir -p bin && cp /tmp/kuasar.img bin/kuasar.img && sudo rm /tmp/kuasar.img
+	@mkdir -p bin && cp /tmp/kuasar.img bin/kuasar.img && rm /tmp/kuasar.img
 
 bin/kuasar.initrd:
 	@bash -x vmm/scripts/image/${GUESTOS_IMAGE}/build.sh initrd
-	@mkdir -p bin && cp /tmp/kuasar.initrd bin/kuasar.initrd && sudo rm /tmp/kuasar.initrd
+	@mkdir -p bin && cp /tmp/kuasar.initrd bin/kuasar.initrd && rm /tmp/kuasar.initrd
 
 bin/wasm-sandboxer:
 	@cd wasm && cargo build --release --features=${WASM_RUNTIME}
