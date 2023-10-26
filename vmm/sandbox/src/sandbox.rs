@@ -466,6 +466,9 @@ where
 
     async fn stop(&mut self, force: bool) -> Result<()> {
         match self.status {
+            SandboxStatus::Created => {
+                return Ok(());
+            }
             SandboxStatus::Running(_) => {}
             SandboxStatus::Stopped(_, _) => {
                 return Ok(());

@@ -32,3 +32,4 @@
 /usr/bin/ls /bin
 /usr/bin/cat /bin
 /usr/bin/cp /bin
+/usr/bin/busybox /bin
