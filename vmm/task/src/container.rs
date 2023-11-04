@@ -17,32 +17,30 @@ limitations under the License.
 use std::{
     convert::TryFrom, os::unix::prelude::ExitStatusExt, path::Path, process::ExitStatus, sync::Arc,
 };
+use std::collections::HashMap;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 use async_trait::async_trait;
-use containerd_shim::{
-    api::{CreateTaskRequest, ExecProcessRequest, Status},
-    asynchronous::{
-        console::ConsoleSocket,
-        container::{ContainerFactory, ContainerTemplate, ProcessFactory},
-        monitor::{monitor_subscribe, monitor_unsubscribe},
-        processes::{ProcessLifecycle, ProcessTemplate},
-        util::read_file_to_str,
-    },
-    error::{Error, Result},
-    io::Stdio,
-    monitor::Topic,
-    other, other_error,
-    protos::{
-        cgroups::metrics::Metrics,
-        protobuf::{CodedInputStream, Message},
-        shim::oci::Options,
-        types::task::ProcessInfo,
-    },
-    util::read_spec,
-    ExitSignal,
-};
+use containerd_shim::{api::{CreateTaskRequest, ExecProcessRequest, Status}, asynchronous::{
+    console::ConsoleSocket,
+    container::{ContainerFactory, ContainerTemplate, ProcessFactory},
+    monitor::{monitor_subscribe, monitor_unsubscribe},
+    processes::{ProcessLifecycle, ProcessTemplate},
+    util::read_file_to_str,
+}, error::{Error, Result}, io::Stdio, monitor::Topic, other, other_error, protos::{
+    cgroups::metrics::Metrics,
+    protobuf::{CodedInputStream, Message},
+    shim::oci::Options,
+    types::task::ProcessInfo,
+}, util::read_spec, ExitSignal, io_error};
+use containerd_shim::util::mkdir;
+use lazy_static::lazy_static;
 use log::{debug, error};
 use nix::{mount, mount::MsFlags, sys::signalfd::signal::kill, unistd::Pid};
+use nix::fcntl::{OFlag, open};
+use nix::sched::{CloneFlags, setns, unshare};
+use nix::sys::stat::Mode;
+use nix::unistd::{getpid, gettid};
 use oci_spec::runtime::{LinuxResources, Process, Spec};
 use runc::{options::GlobalOpts, Runc, Spawner};
 use serde::Deserialize;
@@ -52,9 +50,8 @@ use tokio::{
     process::Command,
     sync::Mutex,
 };
-use vmm_common::{
-    mount::get_mount_type, storage::Storage, ETC_RESOLV, KUASAR_STATE_DIR, RESOLV_FILENAME,
-};
+use tokio::task::spawn_blocking;
+use vmm_common::{mount::get_mount_type, storage::Storage, ETC_RESOLV, KUASAR_STATE_DIR, RESOLV_FILENAME, IPC_NAMESPACE, UTS_NAMESPACE, NET_NAMESPACE, SANDBOX_NS_PATH};
 
 use crate::{
     device::rescan_pci_bus,
@@ -71,6 +68,14 @@ pub const GROUP_LABELS: [&str; 2] = [
 pub const INIT_PID_FILE: &str = "init.pid";
 
 const STORAGE_ANNOTATION: &str = "io.kuasar.storages";
+
+lazy_static! {
+    static ref CLONE_FLAG_TABLE: HashMap<String, CloneFlags> = HashMap::from([
+    (String::from(NET_NAMESPACE), CloneFlags::CLONE_NEWNET),
+    (String::from(IPC_NAMESPACE), CloneFlags::CLONE_NEWIPC),
+    (String::from(UTS_NAMESPACE), CloneFlags::CLONE_NEWUTS),
+    ]);
+}
 
 pub type ExecProcess = ProcessTemplate<KuasarExecLifecycle>;
 pub type InitProcess = ProcessTemplate<KuasarInitLifecycle>;
@@ -197,7 +202,7 @@ impl KuasarFactory {
         Self { sandbox }
     }
 
-    pub fn create_sandbox(&self) -> Result<()> {
+    pub async fn create_sandbox(&self) -> Result<()> {
         // Setup DNS
         // bind mount to /etc/resolv.conf
         let dns_file = Path::new(KUASAR_STATE_DIR).join(RESOLV_FILENAME);
@@ -209,6 +214,7 @@ impl KuasarFactory {
             None::<&str>,
         )?;
         // Setup sandbox namespace
+        setup_sandbox_ns().await?;
         Ok(())
     }
 
@@ -286,6 +292,53 @@ pub async fn runtime_error(bundle: &str, e: runc::error::Error, msg: &str) -> Er
             }
         }
     }
+}
+
+async fn setup_sandbox_ns() -> Result<()> {
+    setup_persistent_ns(IPC_NAMESPACE).await?;
+    setup_persistent_ns(UTS_NAMESPACE).await?;
+    Ok(())
+}
+
+async fn setup_persistent_ns(ns_type: &str) -> Result<()> {
+    let clone_type = CLONE_FLAG_TABLE.get(ns_type)
+        .ok_or(other!("bad ns type {}", ns_type))?
+        .clone();
+    mkdir(SANDBOX_NS_PATH, 0o711).await?;
+    let sandbox_ns_path = Path::new(SANDBOX_NS_PATH).join(ns_type);
+    File::create(&sandbox_ns_path).await.map_err(io_error!(e, "failed to create: {}", sandbox_ns_path.display()))?;
+
+    let ns_type = ns_type.to_string();
+    spawn_blocking(move || {
+        let ns_path = format!("/proc/{}/task/{}/ns/{}", getpid(), gettid(), ns_type);
+        let ns_fd =
+            safe_open_file(ns_path.as_str(), OFlag::O_CLOEXEC, Mode::empty()).unwrap();
+
+        unshare(clone_type).expect("failed to do unshare");
+
+        mount::mount(
+            Some(ns_path.as_str()),
+            &sandbox_ns_path,
+            Some("none"),
+            MsFlags::MS_BIND,
+            None::<&str>,
+        ).expect("failed to mount sandbox ns");
+
+        setns(ns_fd.as_raw_fd(), clone_type).expect("failed to set ns");
+    })
+        .await
+        .map_err(|e| other!("failed to wait for the ns: {}", e))?;
+    Ok(())
+}
+
+pub fn safe_open_file<P: ?Sized + nix::NixPath>(
+    path: &P,
+    oflag: OFlag,
+    mode: Mode,
+) -> std::result::Result<OwnedFd, nix::Error> {
+    let fd = open(path, oflag, mode)?;
+    // SAFETY: contruct a OwnedFd from RawFd, close fd when OwnedFd drop
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
 }
 
 #[async_trait]

@@ -33,3 +33,10 @@ pub const DEV_SHM: &str = "/dev/shm";
 pub const HOSTS_FILENAME: &str = "hosts";
 pub const HOSTNAME_FILENAME: &str = "hostname";
 pub const RESOLV_FILENAME: &str = "resolv.conf";
+
+
+pub const SANDBOX_NS_PATH: &str = "/run/sandbox-ns";
+pub const NET_NAMESPACE: &str = "net";
+pub const IPC_NAMESPACE: &str = "ipc";
+pub const UTS_NAMESPACE: &str = "uts";
+

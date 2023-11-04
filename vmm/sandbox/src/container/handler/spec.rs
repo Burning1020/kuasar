@@ -21,7 +21,7 @@ use async_trait::async_trait;
 use containerd_sandbox::error::Error;
 use containerd_sandbox::spec::{JsonSpec, Mount};
 use path_clean::clean;
-use vmm_common::{ETC_HOSTNAME, ETC_HOSTS, ETC_RESOLV, HOSTNAME_FILENAME, HOSTS_FILENAME, KUASAR_STATE_DIR, RESOLV_FILENAME, SHARED_DIR_SUFFIX};
+use vmm_common::{ETC_HOSTNAME, ETC_HOSTS, ETC_RESOLV, HOSTNAME_FILENAME, HOSTS_FILENAME, IPC_NAMESPACE, KUASAR_STATE_DIR, RESOLV_FILENAME, SANDBOX_NS_PATH, SHARED_DIR_SUFFIX, UTS_NAMESPACE};
 
 use crate::{
     container::handler::Handler, sandbox::KuasarSandbox, utils::write_file_atomic, vm::VM,
@@ -51,6 +51,8 @@ where
         sandbox: &mut KuasarSandbox<T>,
     ) -> containerd_sandbox::error::Result<()> {
         let shared_path =  format!("{}/{}", sandbox.base_dir, SHARED_DIR_SUFFIX);
+        let hostname = sandbox.data.config.as_ref()
+            .map(|c| c.hostname.to_string()).unwrap_or_default();
         let container = sandbox.container_mut(&self.container_id)?;
         let spec = container
             .data
@@ -66,6 +68,20 @@ where
         }
         // Update sandbox files mounts for container
         container_mounts(&shared_path, spec);
+
+        // Update ipc and uts namespace for container
+        if let Some(linux) = spec.linux.as_mut() {
+            for ns in linux.namespaces.iter_mut() {
+                if ns.r#type == IPC_NAMESPACE || ns.r#type == UTS_NAMESPACE {
+                    ns.path = format!("{}/{}", SANDBOX_NS_PATH, ns.r#type);
+                    continue;
+                }
+            }
+        }
+
+        // Update container hostname to sandbox hostname
+        spec.hostname = hostname;
+
         let spec_str = serde_json::to_string(spec)
             .map_err(|e| anyhow!("failed to parse spec in sandbox, {}", e))?;
         let config_path = format!("{}/{}", container.data.bundle, CONFIG_FILE_NAME);

@@ -39,7 +39,7 @@ pub(crate) async fn create_task_service() -> TaskService<KuasarFactory, KuasarCo
     let (tx, mut rx) = channel(128);
     let sandbox = Arc::new(Mutex::new(SandboxResources::new().await));
     let factory = KuasarFactory::new(sandbox);
-    factory.create_sandbox().expect("failed to setup sandbox");
+    factory.create_sandbox().await.expect("failed to setup sandbox");
     let task = TaskService {
         factory,
         containers: Arc::new(Default::default()),
