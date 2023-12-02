@@ -17,6 +17,7 @@ limitations under the License.
 use std::{os::unix::io::RawFd, process::Stdio};
 
 use anyhow::anyhow;
+use async_trait::async_trait;
 use containerd_sandbox::error::{Error, Result};
 use log::{debug, error};
 use serde::{Deserialize, Serialize};
@@ -27,7 +28,9 @@ use tokio::{
     sync::watch::{channel, Receiver, Sender},
     task::JoinHandle,
 };
+use vmm_common::SHARED_DIR_SUFFIX;
 
+use self::{factory::CloudHypervisorVMFactory, hooks::CloudHypervisorHooks};
 use crate::{
     cloud_hypervisor::{
         client::ChClient,
@@ -35,9 +38,11 @@ use crate::{
         devices::{block::Disk, virtio_net::VirtioNetDevice, CloudHypervisorDevice},
     },
     device::{BusType, DeviceInfo},
+    impl_recoverable, load_config,
     param::ToCmdLineParams,
-    utils::{read_file, read_std, set_cmd_fd, set_cmd_netns, wait_pid, write_file_atomic},
-    vm::{Recoverable, VM},
+    sandbox::KuasarSandboxer,
+    utils::{read_std, set_cmd_fd, set_cmd_netns, wait_pid, write_file_atomic},
+    vm::{Pids, VcpuThreads, VM},
 };
 
 mod client;
@@ -45,6 +50,9 @@ pub mod config;
 pub mod devices;
 pub mod factory;
 pub mod hooks;
+
+const VCPU_PREFIX: &str = "vcpu";
+pub const CONFIG_CLH_PATH: &str = "/var/lib/kuasar/config_clh.toml";
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct CloudHypervisorVM {
@@ -61,6 +69,7 @@ pub struct CloudHypervisorVM {
     #[serde(skip)]
     client: Option<ChClient>,
     fds: Vec<RawFd>,
+    pids: Pids,
 }
 
 impl CloudHypervisorVM {
@@ -73,7 +82,7 @@ impl CloudHypervisorVM {
 
         let mut virtiofsd_config = vm_config.virtiofsd.clone();
         virtiofsd_config.socket_path = format!("{}/virtiofs.sock", base_dir);
-        virtiofsd_config.shared_dir = base_dir.to_string();
+        virtiofsd_config.shared_dir = format!("{}/{}", base_dir, SHARED_DIR_SUFFIX);
         Self {
             id: id.to_string(),
             config,
@@ -85,6 +94,7 @@ impl CloudHypervisorVM {
             wait_chan: None,
             client: None,
             fds: vec![],
+            pids: Pids::default(),
         }
     }
 
@@ -92,13 +102,15 @@ impl CloudHypervisorVM {
         self.devices.push(Box::new(device));
     }
 
-    async fn pid(&self) -> Result<u32> {
-        let pid_file = format!("{}/pid", self.base_dir);
-        let pid = read_file(&*pid_file).await.and_then(|x| {
-            x.parse::<u32>()
-                .map_err(|e| anyhow!("failed to parse pid file {}, {}", x, e).into())
-        })?;
-        Ok(pid)
+    fn pid(&self) -> Result<u32> {
+        match self.pids.vmm_pid {
+            None => Err(anyhow!("empty pid from vmm_pid").into()),
+            Some(pid) => Ok(pid),
+        }
+    }
+
+    async fn create_client(&self) -> Result<ChClient> {
+        ChClient::new(&self.config.api_socket)
     }
 
     fn get_client(&mut self) -> Result<&mut ChClient> {
@@ -107,7 +119,8 @@ impl CloudHypervisorVM {
         ))
     }
 
-    fn start_virtiofsd(&self) -> Result<()> {
+    async fn start_virtiofsd(&self) -> Result<u32> {
+        create_dir_all(&self.virtiofsd_config.shared_dir).await?;
         let params = self.virtiofsd_config.to_cmdline_params("--");
         let mut cmd = tokio::process::Command::new(&self.virtiofsd_config.path);
         cmd.args(params.as_slice());
@@ -118,8 +131,11 @@ impl CloudHypervisorVM {
         let child = cmd
             .spawn()
             .map_err(|e| anyhow!("failed to spawn virtiofsd command: {}", e))?;
+        let pid = child
+            .id()
+            .ok_or(anyhow!("the virtiofsd has been polled to completion"))?;
         spawn_wait(child, "virtiofsd".to_string(), None, None);
-        Ok(())
+        Ok(pid)
     }
 
     fn append_fd(&mut self, fd: RawFd) -> usize {
@@ -128,12 +144,12 @@ impl CloudHypervisorVM {
     }
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 impl VM for CloudHypervisorVM {
     async fn start(&mut self) -> Result<u32> {
         debug!("start vm {}", self.id);
         create_dir_all(&self.base_dir).await?;
-        self.start_virtiofsd()?;
+        let virtiofsd_pid = self.start_virtiofsd().await?;
         let mut params = self.config.to_cmdline_params("--");
         for d in self.devices.iter() {
             params.extend(d.to_cmdline_params("--"));
@@ -164,13 +180,18 @@ impl VM for CloudHypervisorVM {
             Some(pid_file),
             Some(tx),
         );
-        self.client = Some(ChClient::new(&self.config.api_socket)?);
+        self.client = Some(self.create_client().await?);
         self.wait_chan = Some(rx);
+
+        // update vmm related pids
+        self.pids.vmm_pid = pid;
+        self.pids.affilicated_pids.push(virtiofsd_pid);
+        // TODO: add child virtiofsd process
         Ok(pid.unwrap_or_default())
     }
 
     async fn stop(&mut self, force: bool) -> Result<()> {
-        let pid = self.pid().await?;
+        let pid = self.pid()?;
         if pid == 0 {
             return Ok(());
         }
@@ -235,24 +256,36 @@ impl VM for CloudHypervisorVM {
     }
 
     async fn wait_channel(&self) -> Option<Receiver<(u32, i128)>> {
-        return self.wait_chan.clone();
+        self.wait_chan.clone()
+    }
+
+    async fn vcpus(&self) -> Result<VcpuThreads> {
+        // Refer to https://github.com/firecracker-microvm/firecracker/issues/718
+        Ok(VcpuThreads {
+            vcpus: procfs::process::Process::new(self.pid()? as i32)
+                .map_err(|e| anyhow!("failed to get process {}", e))?
+                .tasks()
+                .map_err(|e| anyhow!("failed to get tasks {}", e))?
+                .flatten()
+                .filter_map(|t| {
+                    t.stat()
+                        .map_err(|e| anyhow!("failed to get stat {}", e))
+                        .ok()?
+                        .comm
+                        .strip_prefix(VCPU_PREFIX)
+                        .and_then(|comm| comm.parse().ok())
+                        .map(|index| (index, t.tid as i64))
+                })
+                .collect(),
+        })
+    }
+
+    fn pids(&self) -> Pids {
+        self.pids.clone()
     }
 }
 
-#[async_trait::async_trait]
-impl Recoverable for CloudHypervisorVM {
-    async fn recover(&mut self) -> Result<()> {
-        self.client = Some(ChClient::new(&self.config.api_socket)?);
-        let pid = self.pid().await?;
-        let (tx, rx) = channel((0u32, 0i128));
-        tokio::spawn(async move {
-            let wait_result = wait_pid(pid as i32).await;
-            tx.send(wait_result).unwrap_or_default();
-        });
-        self.wait_chan = Some(rx);
-        Ok(())
-    }
-}
+impl_recoverable!(CloudHypervisorVM);
 
 macro_rules! read_stdio {
     ($stdio:expr, $cmd_name:ident) => {
@@ -307,4 +340,16 @@ fn spawn_wait(
             }
         }
     })
+}
+
+pub async fn init_cloud_hypervisor_sandboxer(
+) -> Result<KuasarSandboxer<CloudHypervisorVMFactory, CloudHypervisorHooks>> {
+    let (config, persist_dir_path) =
+        load_config::<CloudHypervisorVMConfig>(CONFIG_CLH_PATH).await?;
+    let hooks = CloudHypervisorHooks {};
+    let mut s = KuasarSandboxer::new(config.sandbox, config.hypervisor, hooks);
+    if !persist_dir_path.is_empty() {
+        s.recover(&persist_dir_path).await?;
+    }
+    Ok(s)
 }

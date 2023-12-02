@@ -1,11 +1,11 @@
 # Architecture
-Kuasar-sandboxer is a sandboxer plugin of containerd. a sandboxer is a component of containerd for container sandbox lifecycle management. A sandbox should provide a set of task API to containerd for container lifecycle management. the `containerd-task-kuasar` the PID 1 process running in the vm launched by vmm-sandboxer, it provides task API with the vsock connection.
+Kuasar-sandboxer is a sandboxer plugin of containerd. a sandboxer is a component of containerd for container sandbox lifecycle management. A sandbox should provide a set of task API to containerd for container lifecycle management. the `vmm-task` the PID 1 process running in the vm launched by vmm-sandboxer, it provides task API with the vsock connection.
 ![](images/arch.png)
 
 # Installation Guide
 
 ## Prerequisites
-kuasar should be running on bare metal of x86_64 arch, HostOS should be linux with of 4.8 or higher, with hypervisor installed(qemu support currently, and cloud-hypervisor will be supported soon), Containerd with CRI plugin is also required. rust toolchains is required for compiling the source.
+kuasar should be running on bare metal of x86_64 arch, HostOS should be linux of 4.8 or higher, with hypervisor installed(qemu/stratovirt/cloud-hypervisor supported), Containerd with CRI plugin is also required. rust toolchains is required for compiling the source.
 
 ## Building from source
 
@@ -62,6 +62,86 @@ The default config looks like this:
   thread_pool_size = 4
 ```
 
+# Run vmm-sandboxer as a systemd service
+
+## Install and run kuasar-vmm systemd service
+
+1. Run `make install-vmm` to install vmm-sandboxer related executable file, configuration files, and `kuasar-vmm` systemd service file into the destination directory. 
+2. Start `kuasar-vmm` systemd service with `systemctl start kuasar-vmm.service` command. 
+3. Check `kuasar-vmm` systemd service status with `systemctl status kuasar-vmm.service`.
+
+The following output indicates that the `kuasar-vmm` systemd service is running properly.
+```bash
+$ sudo systemctl status kuasar-vmm.service 
+● kuasar-vmm.service - Kuasar microVM type sandboxer daemon process
+     Loaded: loaded (/usr/lib/systemd/system/kuasar-vmm.service; disabled; vendor preset: disabled)
+     Active: active (running) since Thu 2023-07-13 15:33:18 CST; 56min ago
+   Main PID: 3619585 (vmm-sandboxer)
+      Tasks: 97 (limit: 1648354)
+     Memory: 14.2M
+     CGroup: /system.slice/kuasar-vmm.service
+             └─3619585 /usr/local/bin/vmm-sandboxer --listen /run/vmm-sandboxer.sock --dir /run/kuasar-vmm
+
+Jul 13 15:33:18 node systemd[1]: Starting Kuasar microVM type sandboxer daemon process...
+Jul 13 15:33:18 node vmm-sandboxer[3619585]: [2023-07-13T07:33:18.905523Z INFO  containerd_sandbox] start sandbox plugin: kuasar-sandboxer
+Jul 13 15:33:18 node systemd[1]: Started Kuasar microVM type sandboxer daemon process.
+```
+
+## Configure kuasar-vmm systemd service
+
+The configuration file of the `kuasar-vmm` systemd service is stored in the `/etc/sysconfig/kuasar-vmm` file.
+
+```bash
+$ cat /etc/sysconfig/kuasar-vmm
+# configure the vmm-sandboxer command options
+OPTIONS='--listen /run/vmm-sandboxer.sock --dir /run/kuasar-vmm'
+```
+
+
+## Get kuasar-vmm service log
+
+Since `vmm-sandboxer` daemon process is running as a `kuasar-vmm` systemd service, vmm-sandboxer's stdout/stderr outputs will be collected by systemd-journald journal service.
+
+So you can use the `journalctl` command to get vmm-sandboxer process log:
+```bash
+$ journalctl -u kuasar-vmm.service -f
+
+Jul 13 15:33:18 node systemd[1]: Starting Kuasar microVM type sandboxer daemon process...                                                       
+Jul 13 15:33:18 node vmm-sandboxer[3619585]: [2023-07-13T07:33:18.905523Z INFO  containerd_sandbox] start sandbox plugin: kuasar-sandboxer      
+Jul 13 15:33:18 node systemd[1]: Started Kuasar microVM type sandboxer daemon process.
+Jul 13 15:33:41 node vmm-sandboxer[3619585]: [2023-07-13T07:33:41.636023Z INFO  containerd_sandbox::rpc] remove container c0da24a1e3c614fcb8bc70b76708ce2e8089c1f6386abc328973a8fff3ede761 from sandbox 31e668050c2031e9e7243720eaa8264c42b0283007e419948689cac2badb71cd
+Jul 13 15:33:41 node vmm-sandboxer[3619585]: [2023-07-13T07:33:41.643792Z INFO  containerd_sandbox::rpc] stop sandbox 31e668050c2031e9e7243720eaa8264c42b0283007e419948689cac2badb71cd
+Jul 13 15:33:41 node vmm-sandboxer[3619585]: [2023-07-13T07:33:41.644358Z ERROR vmm_sandboxer::stratovirt::virtiofs] vhost_user_fs exit signal: 9 (SIGKILL)
+Jul 13 15:33:41 node vmm-sandboxer[3619585]: [2023-07-13T07:33:41.742550Z INFO  containerd_sandbox::rpc] shutdown sandbox 31e668050c2031e9e7243720eaa8264c42b0283007e419948689cac2badb71cd
+```
+
+# Developer  Guide
+
+## Set up a debug console
+
+Kuasar vmm supports setting up a shell debug console by adding `task.debug` to kernel_params in config file, this requires the guest image to include /bin/bash.
+
+```toml
+[hypervisor]
+  kernel_params = "task.debug"
+```
+
+After starting pod, get the `vsock guest-cid` from vm process:
+
+```bash
+$ ps -ef | grep stratovirt | grep 5cbcf744949d8 
+/usr/bin/stratovirt -name sandbox-5cbcf744949d8500e7159d6bd1e3894211f475549c0be15d9c60d3c502c7ede3 ...
+-device vhost-vsock-pci,id=vsock-395568061,guest-cid=395568061,bus=pcie.0,addr=0x3,vhostfd=3 
+...
+```
+
+Then developers could enter the guest os debug console shell environment by:
+
+```bash
+# ncat --vsock <guest-cid> <debug-console>
+$ ncat --vsock 395568061 1025
+```
+
 # Note
 
-Please note that this guide only teach you how to build kuasar from source code, if you want to run the kuasar, cloud hypervisor and virtiofsd are also needed!
+Please note that this guide only teach you how to build kuasar from source code, if you want to run the kuasar, hypervisor and virtiofsd are also needed!

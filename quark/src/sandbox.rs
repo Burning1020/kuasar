@@ -51,7 +51,7 @@ pub struct QuarkSandboxer {
 }
 
 pub struct QuarkSandbox {
-    pub(crate) id: String,
+    pub(crate) _id: String,
     pub(crate) base_dir: String,
     pub(crate) data: SandboxData,
     pub(crate) status: SandboxStatus,
@@ -69,7 +69,7 @@ impl Sandboxer for QuarkSandboxer {
 
     async fn create(&self, id: &str, s: SandboxOption) -> Result<()> {
         let mut sandbox = QuarkSandbox {
-            id: id.to_string(),
+            _id: id.to_string(),
             base_dir: s.base_dir,
             data: s.sandbox,
             status: SandboxStatus::Created,
@@ -148,13 +148,13 @@ impl Sandboxer for QuarkSandboxer {
     }
 
     async fn sandbox(&self, id: &str) -> Result<Arc<Mutex<Self::Sandbox>>> {
-        return Ok(self
+        Ok(self
             .sandboxes
             .read()
             .await
             .get(id)
             .ok_or_else(|| Error::NotFound(id.to_string()))?
-            .clone());
+            .clone())
     }
 
     async fn stop(&self, id: &str, _force: bool) -> Result<()> {
@@ -210,10 +210,9 @@ impl Sandbox for QuarkSandbox {
     }
 
     async fn container(&self, id: &str) -> Result<&Self::Container> {
-        return self
-            .containers
+        self.containers
             .get(id)
-            .ok_or(Error::NotFound(format!("no container id {} found", id)));
+            .ok_or(Error::NotFound(format!("no container id {} found", id)))
     }
 
     async fn append_container(&mut self, id: &str, option: ContainerOption) -> Result<()> {
@@ -524,7 +523,7 @@ impl QuarkSandboxer {
     }
 }
 
-pub(crate) fn to_any(spec: &JsonSpec) -> Result<Any> {
+pub(crate) fn _to_any(spec: &JsonSpec) -> Result<Any> {
     let spec_vec =
         serde_json::to_vec(spec).map_err(|e| anyhow!("failed to parse sepc to json, {}", e))?;
     Ok(Any {

@@ -20,6 +20,7 @@ use std::{
         prelude::{AsRawFd, FromRawFd, OwnedFd},
     },
     path::Path,
+    str::FromStr,
     time::Duration,
 };
 
@@ -79,6 +80,14 @@ pub fn get_resources(data: &SandboxData) -> Option<&LinuxContainerResources> {
         .and_then(|l| l.resources.as_ref())
 }
 
+pub fn get_overhead_resources(data: &SandboxData) -> Option<&LinuxContainerResources> {
+    data.config
+        .as_ref()
+        .and_then(|c| c.linux.as_ref())
+        .and_then(|l| l.overhead.as_ref())
+}
+
+#[allow(dead_code)]
 pub fn get_total_resources(data: &SandboxData) -> Option<LinuxContainerResources> {
     return data
         .config
@@ -96,6 +105,7 @@ pub fn get_total_resources(data: &SandboxData) -> Option<LinuxContainerResources
         });
 }
 
+#[allow(dead_code)]
 fn merge_resources(
     resource1: &LinuxContainerResources,
     resource2: &LinuxContainerResources,
@@ -153,8 +163,11 @@ fn merge_resources(
 
     LinuxContainerResources {
         cpu_period: resource1.cpu_period,
-        cpu_quota: resource1.cpu_quota
-            + resource2.cpu_quota * resource1.cpu_period / resource2.cpu_period,
+        cpu_quota: if resource2.cpu_period != 0 {
+            resource1.cpu_quota + resource2.cpu_quota * resource1.cpu_period / resource2.cpu_period
+        } else {
+            resource1.cpu_quota
+        },
         cpu_shares: resource1.cpu_shares + resource2.cpu_shares,
         memory_limit_in_bytes: resource1.memory_limit_in_bytes + resource2.memory_limit_in_bytes,
         oom_score_adj,
@@ -167,6 +180,7 @@ fn merge_resources(
     }
 }
 
+#[allow(dead_code)]
 fn merge_cpusets(cpusets1: &str, cpusets2: &str) -> Result<String> {
     let cpuset1_parts = cpuset_parts(cpusets1)?;
     let cpuset2_parts = cpuset_parts(cpusets2)?;
@@ -194,6 +208,7 @@ fn merge_cpusets(cpusets1: &str, cpusets2: &str) -> Result<String> {
         .join(","))
 }
 
+#[allow(dead_code)]
 fn merge_cpuset(base: (u32, u32), delta: (u32, u32)) -> (u32, u32) {
     let (mut low, mut high) = base;
     if delta.1 < low {
@@ -211,6 +226,7 @@ fn merge_cpuset(base: (u32, u32), delta: (u32, u32)) -> (u32, u32) {
     (low, high)
 }
 
+#[allow(dead_code)]
 fn cpuset_intersect(cpuset1: (u32, u32), cpuset2: (u32, u32)) -> bool {
     if cpuset2.1 < cpuset1.0 {
         return false;
@@ -221,6 +237,7 @@ fn cpuset_intersect(cpuset1: (u32, u32), cpuset2: (u32, u32)) -> bool {
     true
 }
 
+#[allow(dead_code)]
 fn cpuset_parts(cpuset: &str) -> Result<Vec<(u32, u32)>> {
     let mut cpuset1_parts = vec![];
     let c1 = cpuset.split(',');
@@ -230,6 +247,7 @@ fn cpuset_parts(cpuset: &str) -> Result<Vec<(u32, u32)>> {
     Ok(cpuset1_parts)
 }
 
+#[allow(dead_code)]
 fn cpuset_one_part(cpuset: &str) -> Result<(u32, u32)> {
     let parts = cpuset.split('-').collect::<Vec<&str>>();
     let low = parts[0]
@@ -246,6 +264,7 @@ fn cpuset_one_part(cpuset: &str) -> Result<(u32, u32)> {
     Ok((low, high))
 }
 
+#[allow(dead_code)]
 pub fn cpuset_tostring(cpuset: (u32, u32)) -> String {
     if cpuset.0 == cpuset.1 {
         return cpuset.0.to_string();
@@ -449,4 +468,19 @@ pub fn set_cmd_fd(cmd: &mut Command, fds: Vec<RawFd>) -> Result<()> {
         })
     };
     Ok(())
+}
+
+pub fn get_sandbox_cgroup_parent_path(data: &SandboxData) -> Option<String> {
+    data.config
+        .as_ref()
+        .and_then(|c| c.linux.as_ref())
+        .map(|l| l.cgroup_parent.clone())
+}
+
+pub fn init_logger(level: &str) {
+    let log_level = log::LevelFilter::from_str(level).unwrap_or(log::LevelFilter::Info);
+    env_logger::Builder::from_default_env()
+        .format_timestamp_micros()
+        .filter_level(log_level)
+        .init();
 }

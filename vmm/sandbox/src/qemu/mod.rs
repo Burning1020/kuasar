@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 use std::{
+    collections::HashMap,
     os::unix::io::{AsRawFd, FromRawFd, RawFd},
     time::{Duration, SystemTime},
 };
@@ -36,8 +37,11 @@ use tokio::{
 };
 use unshare::Fd;
 
+use self::{factory::QemuVMFactory, hooks::QemuHooks};
 use crate::{
     device::{BusType, DeviceInfo, SlotStatus, Transport},
+    impl_recoverable,
+    kata_config::KataConfig,
     param::ToCmdLineParams,
     qemu::{
         config::QemuConfig,
@@ -52,8 +56,9 @@ use crate::{
         qmp_client::QmpClient,
         utils::detect_pid,
     },
-    utils::{read_file, read_std, wait_channel, wait_pid},
-    vm::{BlockDriver, VM},
+    sandbox::KuasarSandboxer,
+    utils::{read_std, wait_channel, wait_pid},
+    vm::{BlockDriver, Pids, VcpuThreads, VM},
 };
 
 pub mod config;
@@ -70,22 +75,17 @@ pub(crate) const QEMU_START_TIMEOUT_IN_SEC: u64 = 10;
 // but skip all the fields serialization.
 #[derive(Default, Serialize, Deserialize)]
 pub struct QemuVM {
-    #[serde(skip)]
     id: String,
-    #[serde(skip)]
     config: QemuConfig,
     #[serde(skip)]
     devices: Vec<Box<dyn QemuDevice + Sync + Send>>,
     #[serde(skip)]
     hot_attached_devices: Vec<Box<dyn QemuHotAttachable + Sync + Send>>,
-    #[serde(skip)]
     fds: Vec<RawFd>,
-    #[serde(skip)]
     console_socket: String,
-    #[serde(skip)]
     agent_socket: String,
-    #[serde(skip)]
     netns: String,
+    pids: Pids,
     #[serde(skip)]
     block_driver: BlockDriver,
     #[serde(skip)]
@@ -130,7 +130,9 @@ impl VM for QemuVM {
                     error!("failed to read console log, {}", e);
                 });
         });
-        // TODO return qemu pid
+        // update vmm related pids
+        let vmm_pid = detect_pid(self.config.pid_file.as_str(), self.config.path.as_str()).await?;
+        self.pids.vmm_pid = Some(vmm_pid);
         Ok(0)
     }
 
@@ -147,7 +149,7 @@ impl VM for QemuVM {
 
         if let Err(e) = self.wait_stop(Duration::from_secs(10)).await {
             if force {
-                if let Ok(pid) = self.pid().await {
+                if let Ok(pid) = self.pid() {
                     unsafe { kill(pid as i32, 9) };
                 }
             } else {
@@ -213,7 +215,7 @@ impl VM for QemuVM {
     }
 
     async fn hot_attach(&mut self, device_info: DeviceInfo) -> Result<(BusType, String)> {
-        return match device_info {
+        match device_info {
             DeviceInfo::Block(blk_info) => {
                 let device = VirtioBlockDevice::new(
                     "",
@@ -260,7 +262,7 @@ impl VM for QemuVM {
                 // address is not import for char devices as guest will find the device by the name
                 Ok((BusType::PCI, char_info.name.clone()))
             }
-        };
+        }
     }
 
     async fn hot_detach(&mut self, id: &str) -> Result<()> {
@@ -301,7 +303,19 @@ impl VM for QemuVM {
     }
 
     async fn wait_channel(&self) -> Option<Receiver<(u32, i128)>> {
-        return self.wait_chan.clone();
+        self.wait_chan.clone()
+    }
+
+    async fn vcpus(&self) -> Result<VcpuThreads> {
+        // TODO: support get vcpu threads id
+        Ok(VcpuThreads {
+            vcpus: HashMap::new(),
+        })
+    }
+
+    fn pids(&self) -> Pids {
+        // TODO: support get all vmm related pids
+        Pids::default()
     }
 }
 
@@ -316,6 +330,7 @@ impl QemuVM {
             console_socket: format!("{}/console.sock", base_dir),
             agent_socket: "".to_string(),
             netns: netns.to_string(),
+            pids: Pids::default(),
             block_driver: Default::default(),
             wait_chan: None,
             client: None,
@@ -434,15 +449,11 @@ impl QemuVM {
         Ok(())
     }
 
-    async fn pid(&self) -> Result<u32> {
-        if self.config.pid_file.is_empty() {
-            return Err(anyhow!("failed to get pid file of sandbox").into());
+    fn pid(&self) -> Result<u32> {
+        match self.pids.vmm_pid {
+            None => Err(anyhow!("empty pid from vmm_pid").into()),
+            Some(pid) => Ok(pid),
         }
-        let pid = read_file(&*self.config.pid_file).await.and_then(|x| {
-            x.parse::<u32>()
-                .map_err(|e| anyhow!("failed to parse qemu.pid, {}", e).into())
-        })?;
-        Ok(pid)
     }
 
     async fn hot_attach_device<T: QemuHotAttachable + Sync + Send + 'static>(
@@ -518,4 +529,36 @@ impl QemuVM {
                 }
             });
     }
+}
+
+impl_recoverable!(QemuVM);
+
+pub async fn init_qemu_sandboxer() -> Result<KuasarSandboxer<QemuVMFactory, QemuHooks>> {
+    // For compatibility with kata config
+    let config_path = std::env::var("KATA_CONFIG_PATH")
+        .unwrap_or_else(|_| "/usr/share/defaults/kata-containers/configuration.toml".to_string());
+
+    let path = std::path::Path::new(&config_path);
+    if path.exists() {
+        KataConfig::init(path).await?;
+    }
+
+    let vmm_config = KataConfig::hypervisor_config("qemu", |h| h.clone()).await?;
+    let vmm_config = vmm_config.to_qemu_config()?;
+    let sandbox_config = KataConfig::sandbox_config("qemu").await?;
+    let hooks = QemuHooks::new(vmm_config.clone());
+    let mut s = KuasarSandboxer::new(sandbox_config, vmm_config, hooks);
+
+    // Check for "--dir" argument and recover from persisted directory
+    let os_args: Vec<_> = std::env::args_os().collect();
+    for i in 0..os_args.len() {
+        if os_args[i].to_str().unwrap() == "--dir" {
+            let persist_dir_path = os_args[i + 1].to_str().unwrap().to_string();
+            if std::path::Path::new(&persist_dir_path).exists() {
+                s.recover(&persist_dir_path).await?;
+            }
+        }
+    }
+
+    Ok(s)
 }

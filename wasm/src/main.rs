@@ -16,7 +16,7 @@ limitations under the License.
 
 use containerd_shim::asynchronous::monitor::monitor_notify_by_pid;
 use futures::StreamExt;
-use log::{debug, error, warn, LevelFilter};
+use log::{debug, error, warn};
 use nix::{
     errno::Errno,
     libc,
@@ -31,18 +31,17 @@ use signal_hook_tokio::Signals;
 use crate::sandbox::WasmSandboxer;
 
 mod sandbox;
+mod utils;
 #[cfg(feature = "wasmedge")]
 mod wasmedge;
+#[cfg(feature = "wasmtime")]
+mod wasmtime;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_default_env()
-        .format_timestamp_micros()
-        .filter_level(LevelFilter::Debug)
-        .init();
+    env_logger::builder().format_timestamp_micros().init();
     tokio::spawn(async move {
-        let signals = Signals::new([libc::SIGTERM, libc::SIGINT, libc::SIGPIPE, libc::SIGCHLD])
-            .expect("new signal failed");
+        let signals = Signals::new([libc::SIGPIPE, libc::SIGCHLD]).expect("new signal failed");
         handle_signals(signals).await;
     });
 
@@ -57,9 +56,6 @@ async fn handle_signals(signals: Signals) {
     let mut signals = signals.fuse();
     while let Some(sig) = signals.next().await {
         match sig {
-            libc::SIGTERM | libc::SIGINT => {
-                debug!("received {}", sig);
-            }
             libc::SIGCHLD => loop {
                 // Note: see comment at the counterpart in synchronous/mod.rs for details.
                 match wait::waitpid(Some(Pid::from_raw(-1)), Some(WaitPidFlag::WNOHANG)) {

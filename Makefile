@@ -2,18 +2,25 @@ HYPERVISOR ?= cloud_hypervisor
 GUESTOS_IMAGE ?= centos
 WASM_RUNTIME ?= wasmedge
 KERNEL_VERSION ?= 6.2
+ARCH ?= x86_64
+# DEST_DIR is used when built with RPM format
+DEST_DIR ?= /
+INSTALL_DIR := /var/lib/kuasar
+BIN_DIR := /usr/local/bin
+SYSTEMD_SERVICE_DIR := /usr/lib/systemd/system
+SYSTEMD_CONF_DIR := /etc/sysconfig
 
-.PHONY: vmm wasm quark clean all install-vmm install-wasm install-quark install 
+.PHONY: vmm wasm quark clean all install-vmm install-wasm install-quark install
 
 all: vmm quark wasm
 
 bin/vmm-sandboxer:
-	@cd vmm && cargo build --release --features=${HYPERVISOR}
-	@mkdir -p bin && cp vmm/target/release/vmm-sandboxer bin/vmm-sandboxer 
+	@cd vmm/sandbox && cargo build --release --bin ${HYPERVISOR}
+	@mkdir -p bin && cp vmm/sandbox/target/release/${HYPERVISOR} bin/vmm-sandboxer
 
 bin/vmm-task:
-	@cd vmm/task && cargo build --release --target=x86_64-unknown-linux-musl
-	@mkdir -p bin && cp vmm/target/x86_64-unknown-linux-musl/release/vmm-task bin/vmm-task
+	@cd vmm/task && cargo build --release --target=${ARCH}-unknown-linux-musl
+	@mkdir -p bin && cp vmm/task/target/${ARCH}-unknown-linux-musl/release/vmm-task bin/vmm-task
 
 bin/vmlinux.bin:
 	@bash -x vmm/scripts/kernel/${HYPERVISOR}/build.sh ${KERNEL_VERSION}
@@ -38,7 +45,7 @@ bin/quark-sandboxer:
 wasm: bin/wasm-sandboxer
 quark: bin/quark-sandboxer
 
-ifeq ($(HYPERVISOR), "stratovirt")
+ifeq ($(HYPERVISOR), stratovirt)
 vmm: bin/vmm-sandboxer bin/kuasar.initrd bin/vmlinux.bin
 else
 vmm: bin/vmm-sandboxer bin/kuasar.img bin/vmlinux.bin
@@ -46,30 +53,37 @@ endif
 
 clean:
 	@rm -rf bin
-	@cd vmm && cargo clean
+	@cd vmm/sandbox && cargo clean
+	@cd vmm/task && cargo clean
 	@cd wasm && cargo clean
 	@cd quark && cargo clean
 
-ifeq ($(HYPERVISOR), "stratovirt")
 install-vmm:
-	@install -p -m 755 bin/vmm-sandboxer /usr/local/bin/vmm-sandboxer
-	@install -d /var/lib/kuasar
-	@install -p -m 644 bin/vmlinux.bin /var/lib/kuasar/vmlinux.bin
-	@install -p -m 644 bin/kuasar.img /var/lib/kuasar/kuasar.initrd
-	@install -p -m 644 vmm/sandbox/config_stratovirt.toml /var/lib/kuasar/config_stratovirt.toml
+	@install -d -m 750 ${DEST_DIR}${BIN_DIR}
+	@install -p -m 550 bin/vmm-sandboxer ${DEST_DIR}${BIN_DIR}/vmm-sandboxer
+	@install -d -m 750 ${DEST_DIR}${INSTALL_DIR}
+	@install -p -m 640 bin/vmlinux.bin ${DEST_DIR}${INSTALL_DIR}/vmlinux.bin
+	@install -d -m 750 ${DEST_DIR}${SYSTEMD_SERVICE_DIR}
+	@install -p -m 640 vmm/service/kuasar-vmm.service ${DEST_DIR}${SYSTEMD_SERVICE_DIR}/kuasar-vmm.service
+	@install -d -m 750 ${DEST_DIR}${SYSTEMD_CONF_DIR}
+	@install -p -m 640 vmm/service/kuasar-vmm ${DEST_DIR}${SYSTEMD_CONF_DIR}/kuasar-vmm
+
+ifeq ($(HYPERVISOR), stratovirt)
+	@install -p -m 640 bin/kuasar.initrd ${DEST_DIR}${INSTALL_DIR}/kuasar.initrd
+	@install -p -m 640 vmm/sandbox/config_stratovirt_${ARCH}.toml ${DEST_DIR}${INSTALL_DIR}/config_stratovirt.toml
 else
-install-vmm:
-	@install -p -m 755 bin/vmm-sandboxer /usr/local/bin/vmm-sandboxer
-	@install -d /var/lib/kuasar
-	@install -p -m 644 bin/vmlinux.bin /var/lib/kuasar/vmlinux.bin
-	@install -p -m 644 bin/kuasar.img /var/lib/kuasar/kuasar.img
-	@install -p -m 644 vmm/sandbox/config_clh.toml /var/lib/kuasar/config_clh.toml
+	@install -p -m 640 bin/kuasar.img ${DEST_DIR}${INSTALL_DIR}/kuasar.img
+	@install -p -m 640 vmm/sandbox/config_clh.toml ${DEST_DIR}${INSTALL_DIR}/config_clh.toml
 endif
 
 install-wasm:
-	@install -p -m 755 bin/wasm-sandboxer /usr/local/bin/wasm-sandboxer
+	@install -p -m 550 bin/wasm-sandboxer ${DEST_DIR}${BIN_DIR}/wasm-sandboxer
+	@install -d -m 750 ${DEST_DIR}${SYSTEMD_SERVICE_DIR}
+	@install -p -m 640 wasm/service/kuasar-wasm.service ${DEST_DIR}${SYSTEMD_SERVICE_DIR}/kuasar-wasm.service
 
 install-quark:
-	@install -p -m 755 bin/quark-sandboxer /usr/local/bin/quark-sandboxer
+	@install -p -m 550 bin/quark-sandboxer ${DEST_DIR}${BIN_DIR}/quark-sandboxer
+	@install -d -m 750 ${DEST_DIR}${SYSTEMD_SERVICE_DIR}
+	@install -p -m 640 quark/service/kuasar-quark.service ${DEST_DIR}${SYSTEMD_SERVICE_DIR}/kuasar-quark.service
 
 install: all install-vmm install-wasm install-quark

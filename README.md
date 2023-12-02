@@ -1,7 +1,37 @@
 ![](docs/images/logo.png)
 
+<p align="center">
+  <a href="https://github.com/kuasar-io/kuasar/actions/workflows/ci.yml">
+    <img alt="GitHub Workflow Status" src="https://github.com/kuasar-io/kuasar/actions/workflows/ci.yml/badge.svg?branch=main">
+  </a>
+  <a href="https://cloud-native.slack.com/archives/C052JRURD8V">
+    <img src="https://img.shields.io/badge/slack-join_chat-brightgreen.svg" alt="chat" />
+  </a>
+  <img src="https://img.shields.io/badge/rustc-stable+-green.svg" alt="supported rustc stable" />
+  <a href="https://github.com/kuasar-io/kuasar/blob/main/LICENSE">
+    <img alt="GitHub" src="https://img.shields.io/github/license/kuasar-io/kuasar?color=427ece&label=License&style=flat-square">
+  </a>
+  <a href="https://github.com/kuasar-io/kuasar/graphs/contributors">
+    <img alt="GitHub contributors" src="https://img.shields.io/github/contributors/kuasar-io/kuasar?label=Contributors&style=flat-square">
+  </a>
+</p>
+
 Kuasar is an efficient container runtime that provides cloud-native, all-scenario container solutions by supporting multiple sandbox techniques. Written in Rust, it offers a standard sandbox abstraction based on the sandbox API. Additionally, Kuasar provides an optimized framework to accelerate container startup and reduce unnecessary overheads.
 
+# Supported Sandboxes
+
+| Sandboxer  | Sandbox          | Status             |
+|------------|------------------|--------------------|
+| MicroVM    | Cloud Hypervisor | Supported          |
+|            | QEMU             | Supported          |
+|            | Firecracker      | Planned in 2024    |
+|            | StratoVirt       | Supported          |
+| Wasm       | WasmEdge         | Supported          |
+|            | Wasmtime         | Supported          |
+|            | Wasmer           | Planned in 2024    |
+| App Kernel | gVisor           | Planned in 2024    |
+|            | Quark            | Supported          |
+| runC       | runC             | Planned in 2023 H2 |
 # Why Kuasar?
 
 In the container world, a sandbox is a technique used to separate container processes from each other, and from the operating system itself. After the introduction of the [Sandbox API](https://github.com/containerd/containerd/issues/4131), sandbox has become the first-class citizen in containerd. With more and more sandbox techniques available in the container world, a management service called "sandboxer" is expected to be proposed.
@@ -12,7 +42,7 @@ Compared with other container runtimes, Kuasar has the following advantages:
 
 + **Unified Sandbox Abstraction**: The sandbox is a first-class citizen in Kuasar as the Kuasar is entirely built upon the Sandbox API, which was previewed by the containerd community in October 2022. Kuasar fully utilizes the advantages of the Sandbox API, providing a unified way for sandbox access and management, and improving sandbox O&M efficiency.
 + **Multi-Sandbox Colocation**: Kuasar has built-in support for mainstream sandboxes, allowing multiple types of sandboxes to run on a single node. Kuasar is able to balance user's demands for security isolation, fast startup, and standardization, and enables a serverless node resource pool to meet various cloud-native scenario requirements.
-+ **Optimized Framework**: Optimization has been done in Kuasar via removing all pause containers and replacing shim processes by a single resident sandboxer process, bringing about a 1:N process management model, which has a better performance than the current 1:1 shim v2 process model. The benchmark test results showed that Kuasar's sandbox startup speed 2x, while the resource overhead for management was reduced by 99%. More details please refer to [Performance](#Performance).
++ **Optimized Framework**: Optimization has been done in Kuasar via removing all pause containers and replacing shim processes by a single resident sandboxer process, bringing about a 1:N process management model, which has a better performance than the current 1:1 shim v2 process model. The benchmark test results showed that Kuasar's sandbox startup speed 2x, while the resource overhead for management was reduced by 99%. More details please refer to [Performance](#performance).
 + **Open and Neutral**: Kuasar is committed to building an open and compatible multi-sandbox technology ecosystem. Thanks to the Sandbox API, it is more convenient and time-saving to integrate sandbox technologies. Kuasar keeps an open and neutral attitude towards sandbox technologies, therefore all sandbox technologies are welcome. Currently, the Kuasar project is collaborating with open-source communities and projects such as WasmEdge, openEuler and QuarkContainers.
 
 # Kuasar Architecture
@@ -79,8 +109,8 @@ Please also note that Quark requires a Linux kernel version >= 5.15.
 + MicroVM: To launch a microVM-based sandbox, a hypervisor must be installed on the host. 
   + It is recommended to install Cloud Hypervisor by default. You can find Cloud Hypervisor installation instructions [here](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/main/docs/building.md).
   + If you want to run kuasar with iSulad container engine and StratoVirt hypervisor, you can refer to this guide [how-to-run-kuasar-with-isulad-and-stratovirt](docs/vmm/how-to-run-kuasar-with-isulad-and-stratovirt.md).
-+ Quark: To use Quark, please refer to the installation instructions [here](https://chat.openai.com/chat/docs/quark/README.md).
-+ WasmEdge: To start WebAssembly sandboxes, you need to install WasmEdge. Instructions for installing WasmEdge can be found in [install.html](https://wasmedge.org/book/en/quick_start/install.html).
++ Quark: To use Quark, please refer to the installation instructions [here](docs/quark/README.md).
++ WasmEdge: To start WebAssembly sandboxes, you need to install WasmEdge v0.11.2. Instructions for installing WasmEdge can be found in [install.html](https://wasmedge.org/book/en/quick_start/install.html).
 
 ### 3. containerd
 
@@ -113,6 +143,10 @@ make all
 make install
 ```
 
+> Tips: `make all` build command will download the Rust and Golang packages from the internet network, so you need to provide the `http_proxy` and `https_proxy` environments for the `make all` command.
+>
+> If a self-signed certificate is used in the `make all` build command execution environment, you may encounter SSL issues with downloading resources from https URL failed. Therefore, you need to provide a CA-signed certificate and copy it into the root directory of the Kuasar project, then rename it as "proxy.crt". In this way, our build script will use the "proxy.crt" certificate to access the https URLs of Rust and Golang installation packages.
+
 ## Start Kuasar
 
 Launch the sandboxers by the following commands:
@@ -138,7 +172,7 @@ Since Kuasar is a low-level container runtime, all interactions should be done v
 If you have questions, feel free to reach out to us in the following ways:
 
 - [mailing list](https://groups.google.com/forum/#!forum/kuasar)
-- [slack](https://app.slack.com/client/T08PSQ7BQ/C052JRURD8V)
+- [slack](https://cloud-native.slack.com/archives/C052JRURD8V) | [Join](https://slack.cncf.io/)
 
 # Contributing
 

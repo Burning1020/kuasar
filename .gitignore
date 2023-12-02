@@ -1,7 +1,7 @@
 .idea
-bin
+/bin
 .vscode
 target
-Cargo.lock
 **/src/api/*
 !**/src/api/mod.rs
+vmm/common/Cargo.lock

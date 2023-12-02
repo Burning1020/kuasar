@@ -33,6 +33,7 @@ use crate::{
     stratovirt::{devices::HotAttachable, qmp_client::QmpClient},
 };
 
+#[allow(dead_code)]
 pub const VIRTIO_BLK_DRIVER: &str = "virtio-blk";
 
 #[derive(CmdLineParams, Debug, Clone)]
@@ -43,6 +44,8 @@ pub struct VirtioBlockDevice {
     #[property(param = "drive")]
     #[property(param = "device", key = "drive")]
     pub id: String,
+    #[property(param = "device", key = "id")]
+    pub deviceid: String,
     #[property(param = "drive")]
     pub file: Option<String>,
     #[property(param = "drive")]
@@ -51,9 +54,9 @@ pub struct VirtioBlockDevice {
     pub readonly: Option<bool>,
     #[property(param = "drive", generator = "crate::utils::bool_to_on_off")]
     pub direct: Option<bool>,
-    #[property(param = "device")]
+    #[property(param = "device", predicate = "self.addr.len()>0")]
     pub bus: Option<String>,
-    #[property(param = "device")]
+    #[property(param = "device", predicate = "self.addr.len()>0")]
     pub addr: String,
 }
 
@@ -61,10 +64,17 @@ impl_device_no_bus!(VirtioBlockDevice);
 impl_set_get_device_addr!(VirtioBlockDevice);
 
 impl VirtioBlockDevice {
-    pub fn new(driver: &str, id: &str, file: Option<String>, read_only: Option<bool>) -> Self {
+    pub fn new(
+        driver: &str,
+        id: &str,
+        deviceid: &str,
+        file: Option<String>,
+        read_only: Option<bool>,
+    ) -> Self {
         Self {
             driver: driver.to_string(),
             id: id.to_string(),
+            deviceid: deviceid.to_string(),
             file,
             r#if: None,
             readonly: read_only,
@@ -98,7 +108,7 @@ impl HotAttachable for VirtioBlockDevice {
     async fn execute_hot_detach(&self, client: &QmpClient) -> Result<()> {
         debug!("hot detach device {}", self.id);
         let device_id = format!("virtio-{}", self.id());
-        client.delete_device(&*device_id).await?;
+        client.delete_device(&device_id).await?;
         client.execute(self.to_blockdev_del()).await?;
         Ok(())
     }
@@ -150,7 +160,7 @@ impl VirtioBlockDevice {
     fn to_device_add(&self, rp_id: &str) -> device_add {
         let mut args = Dictionary::new();
         args.insert("drive".to_string(), Value::from(self.id()));
-        let addr = format!("0x0");
+        let addr = "0x0".to_string();
         args.insert("addr".to_string(), Value::from(addr));
 
         let driver = "virtio-blk-pci".to_string();
@@ -189,6 +199,7 @@ mod tests {
         let virtio_blk_device = VirtioBlockDevice::new(
             VIRTIO_BLK_DRIVER,
             "drive-0",
+            "",
             Some("/dev/dm-8".to_string()),
             Some(false),
         );
@@ -215,6 +226,7 @@ mod tests {
         let virtio_blk_device = VirtioBlockDevice::new(
             VIRTIO_BLK_DRIVER,
             "drive-0",
+            "",
             Some("/dev/dm-8".to_string()),
             Some(false),
         );
@@ -235,6 +247,7 @@ mod tests {
         let virtio_blk_device = VirtioBlockDevice::new(
             VIRTIO_BLK_DRIVER,
             "drive-0",
+            "",
             Some("/dev/dm-8".to_string()),
             Some(false),
         );
@@ -255,6 +268,7 @@ mod tests {
         let virtio_blk_device = VirtioBlockDevice::new(
             VIRTIO_BLK_DRIVER,
             "drive-0",
+            "",
             Some("/dev/dm-8".to_string()),
             Some(false),
         );

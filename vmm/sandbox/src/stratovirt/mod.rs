@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 use std::{
+    collections::HashMap,
     os::unix::io::{AsRawFd, FromRawFd, RawFd},
     time::{Duration, SystemTime},
 };
@@ -26,6 +27,7 @@ use futures_util::TryFutureExt;
 use log::{debug, error, trace, warn};
 use nix::{fcntl::OFlag, libc::kill, sys::stat::Mode};
 use qapi::qmp::quit;
+use qmp::CpuInfo;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tokio::{
@@ -36,10 +38,17 @@ use tokio::{
 };
 use unshare::Fd;
 
-use self::devices::{pcie_rootbus::PcieRootBus, rootport::RootPort, PCIE_ROOTBUS_CAPACITY};
+use self::{
+    config::StratoVirtVMConfig,
+    devices::{pcie_rootbus::PcieRootBus, rootport::RootPort, PCIE_ROOTBUS_CAPACITY},
+    factory::StratoVirtVMFactory,
+    hooks::StratoVirtHooks,
+};
 use crate::{
     device::{Bus, BusType, DeviceInfo, Slot, SlotStatus, Transport},
+    impl_recoverable, load_config,
     param::ToCmdLineParams,
+    sandbox::KuasarSandboxer,
     stratovirt::{
         config::StratoVirtConfig,
         devices::{
@@ -50,51 +59,47 @@ use crate::{
         utils::detect_pid,
         virtiofs::VirtiofsDaemon,
     },
-    utils::{read_file, read_std, wait_channel, wait_pid},
-    vm::{BlockDriver, VM},
+    utils::{read_std, wait_channel, wait_pid},
+    vm::{BlockDriver, Pids, VcpuThreads, VM},
 };
 
 pub mod config;
 mod devices;
 pub mod factory;
 pub mod hooks;
+mod qmp;
 mod qmp_client;
 mod utils;
 mod virtiofs;
 
 pub(crate) const STRATOVIRT_START_TIMEOUT_IN_SEC: u64 = 10;
+pub const CONFIG_STRATOVIRT_PATH: &str = "/var/lib/kuasar/config_stratovirt.toml";
 
 // restart recovery is not supported yet,
 // so we annotate the StratoVirtVM with Serialize and Deserlize,
 // but skip all the fields serialization.
 #[derive(Default, Serialize, Deserialize)]
 pub struct StratoVirtVM {
-    #[serde(skip)]
     id: String,
-    #[serde(skip)]
     config: StratoVirtConfig,
     #[serde(skip)]
     devices: Vec<Box<dyn StratoVirtDevice + Sync + Send>>,
     #[serde(skip)]
     hot_attached_devices: Vec<Box<dyn StratoVirtHotAttachable + Sync + Send>>,
-    #[serde(skip)]
     fds: Vec<RawFd>,
-    #[serde(skip)]
     console_socket: String,
-    #[serde(skip)]
     agent_socket: String,
-    #[serde(skip)]
     netns: String,
+    pids: Pids,
     #[serde(skip)]
     block_driver: BlockDriver,
     #[serde(skip)]
     wait_chan: Option<Receiver<(u32, i128)>>,
     #[serde(skip)]
     client: Option<QmpClient>,
-    #[serde(skip)]
     virtiofs_daemon: Option<VirtiofsDaemon>,
     #[serde(skip)]
-    pcie_root_bus: PcieRootBus,
+    pcie_root_bus: Option<PcieRootBus>,
     #[serde(skip)]
     pcie_root_ports_pool: Option<PCIERootPorts>,
 }
@@ -137,8 +142,17 @@ impl VM for StratoVirtVM {
                     error!("failed to read console log, {}", e);
                 });
         });
-        // TODO return stratovirt pid
-        Ok(0)
+
+        // update vmm related pids
+        let vmm_pid = detect_pid(self.config.pid_file.as_str(), self.config.path.as_str()).await?;
+        self.pids.vmm_pid = Some(vmm_pid);
+        if let Some(virtiofsd) = &self.virtiofs_daemon {
+            if let Some(pid) = virtiofsd.pid {
+                self.pids.affilicated_pids.push(pid);
+            }
+        }
+
+        Ok(vmm_pid)
     }
 
     async fn stop(&mut self, force: bool) -> Result<()> {
@@ -159,7 +173,10 @@ impl VM for StratoVirtVM {
 
         if let Err(e) = self.wait_stop(Duration::from_secs(10)).await {
             if force {
-                if let Ok(pid) = self.pid().await {
+                if let Ok(pid) = self.pid() {
+                    if pid == 0 {
+                        return Ok(());
+                    }
                     unsafe { kill(pid as i32, 9) };
                 }
             } else {
@@ -179,17 +196,17 @@ impl VM for StratoVirtVM {
                     fd_ints.push(index as i32);
                 }
 
-                let virtio_net_device = VirtioNetDevice::new(
-                    &tap_info.id,
-                    Some(tap_info.name),
-                    &tap_info.mac_address,
-                    Transport::Pci,
-                    fd_ints,
-                    false,
-                    vec![],
-                    Some(DEFAULT_PCIE_BUS.to_string()),
-                );
-                self.attach_to_pcie_rootbus(virtio_net_device)?;
+                let virtio_net_device = VirtioNetDevice::new()
+                    .id(&tap_info.id)
+                    .name(&tap_info.name)
+                    .mac_address(&tap_info.mac_address)
+                    .transport(Transport::Pci)
+                    .fds(fd_ints)
+                    .vhost(false)
+                    .vhostfds(vec![])
+                    .bus(Some(DEFAULT_PCIE_BUS.to_string()))
+                    .build();
+                self.attach_to_bus(virtio_net_device)?;
             }
             _ => {
                 todo!()
@@ -199,11 +216,12 @@ impl VM for StratoVirtVM {
     }
 
     async fn hot_attach(&mut self, device_info: DeviceInfo) -> Result<(BusType, String)> {
-        return match device_info {
+        match device_info {
             DeviceInfo::Block(blk_info) => {
                 let device = VirtioBlockDevice::new(
                     "",
-                    &*blk_info.id,
+                    &blk_info.id,
+                    "",
                     Some(blk_info.path),
                     Some(blk_info.read_only),
                 );
@@ -223,10 +241,10 @@ impl VM for StratoVirtVM {
             DeviceInfo::Char(_char_info) => Err(Error::Unimplemented(
                 "hot attach for char device".to_string(),
             )),
-        };
+        }
     }
 
-    async fn hot_detach(&mut self, id: &str) -> Result<()> {
+    async fn hot_detach(&mut self, _id: &str) -> Result<()> {
         Ok(())
     }
 
@@ -237,11 +255,31 @@ impl VM for StratoVirtVM {
     }
 
     fn socket_address(&self) -> String {
-        return self.agent_socket.to_string();
+        self.agent_socket.to_string()
     }
 
     async fn wait_channel(&self) -> Option<Receiver<(u32, i128)>> {
-        return self.wait_chan.clone();
+        self.wait_chan.clone()
+    }
+
+    async fn vcpus(&self) -> Result<VcpuThreads> {
+        let client = self.get_client()?;
+        let result = client.execute(qmp::query_cpus {}).await?;
+        let mut vcpu_threads_map: HashMap<i64, i64> = HashMap::new();
+        for vcpu_info in result.iter() {
+            match vcpu_info {
+                CpuInfo::Arm { base, .. } | CpuInfo::x86 { base, .. } => {
+                    vcpu_threads_map.insert(base.CPU, base.thread_id);
+                }
+            }
+        }
+        Ok(VcpuThreads {
+            vcpus: vcpu_threads_map,
+        })
+    }
+
+    fn pids(&self) -> Pids {
+        self.pids.clone()
     }
 }
 
@@ -261,7 +299,8 @@ impl StratoVirtVM {
             client: None,
             virtiofs_daemon: None,
             pcie_root_ports_pool: None,
-            pcie_root_bus: PcieRootBus::default(),
+            pcie_root_bus: None,
+            pids: Pids::default(),
         }
     }
 
@@ -338,10 +377,10 @@ impl StratoVirtVM {
         .map_err(|e| anyhow!("failed to join the stratovirt startup thread {}", e))??;
         let (tx, rx) = channel((0u32, 0i128));
         let _wait_handle = tokio::spawn(async move {
-            // because the direct child process is not the actual running qemu process,
-            // so we have to read pid from the qemu.pid file,
+            // because the direct child process is not the actual running stratovirt process,
+            // so we have to read pid from the stratovirt.pid file,
             // NOTE: it is hard to eliminate the race condition when pid reused.
-            if let Ok(pid) = detect_pid(&*pid_file, &*path).await {
+            if let Ok(pid) = detect_pid(&pid_file, &path).await {
                 let wait_result = wait_pid(pid as i32).await;
                 tx.send(wait_result).unwrap_or_default();
             } else {
@@ -360,7 +399,7 @@ impl StratoVirtVM {
             .as_ref()
             .map(|x| x.name.to_string())
             .ok_or_else(|| anyhow!("failed to get qmp socket path"))?;
-        QmpClient::new(&*socket_addr).await
+        QmpClient::new(&socket_addr).await
     }
 
     fn get_client(&self) -> Result<&QmpClient> {
@@ -381,15 +420,11 @@ impl StratoVirtVM {
         Ok(())
     }
 
-    async fn pid(&self) -> Result<u32> {
-        if self.config.pid_file.is_empty() {
-            return Err(anyhow!("failed to get pid file of sandbox").into());
+    fn pid(&self) -> Result<u32> {
+        match self.pids.vmm_pid {
+            None => Err(anyhow!("empty pid from vmm_pid").into()),
+            Some(pid) => Ok(pid),
         }
-        let pid = read_file(&*self.config.pid_file).await.and_then(|x| {
-            x.parse::<u32>()
-                .map_err(|e| anyhow!("failed to parse qemu.pid, {}", e).into())
-        })?;
-        Ok(pid)
     }
 
     async fn hot_attach_device<T: StratoVirtHotAttachable + Sync + Send + 'static>(
@@ -407,26 +442,37 @@ impl StratoVirtVM {
     }
 
     fn get_empty_pcie_slot_index(&mut self) -> Result<usize> {
-        for (index, slot) in self.pcie_root_bus.bus.slots.iter_mut().enumerate() {
+        for (index, slot) in self
+            .pcie_root_bus
+            .as_mut()
+            .unwrap()
+            .bus
+            .slots
+            .iter_mut()
+            .enumerate()
+        {
             if let SlotStatus::Empty = slot.status {
                 return Ok(index);
             }
         }
 
-        Err(Error::ResourceExhausted(format!(
-            "slots of pcie.0 root bus is full"
-        )))
+        Err(Error::ResourceExhausted(
+            "slots of pcie.0 root bus is full".to_string(),
+        ))
     }
 
-    fn attach_to_pcie_rootbus<T: StratoVirtDevice + Sync + Send + 'static>(
+    fn attach_to_bus<T: StratoVirtDevice + Sync + Send + 'static>(
         &mut self,
         mut device: T,
     ) -> Result<()> {
-        // get the empty slot index
-        let slot_index = self.get_empty_pcie_slot_index()?;
-        // set the pcie slot status to Occupied
-        self.pcie_root_bus.bus.slots[slot_index].status = SlotStatus::Occupied(device.id());
-        device.set_device_addr(slot_index);
+        if self.pcie_root_bus.is_some() {
+            // get the empty slot index
+            let slot_index = self.get_empty_pcie_slot_index()?;
+            // set the pcie slot status to Occupied
+            self.pcie_root_bus.as_mut().unwrap().bus.slots[slot_index].status =
+                SlotStatus::Occupied(device.id());
+            device.set_device_addr(slot_index);
+        }
         self.devices.push(Box::new(device));
         Ok(())
     }
@@ -452,7 +498,7 @@ impl StratoVirtVM {
                 None,
             );
             root_ports.push(root_port.clone());
-            self.attach_to_pcie_rootbus(root_port)?;
+            self.attach_to_bus(root_port)?;
         }
 
         self.pcie_root_ports_pool = Some(PCIERootPorts {
@@ -483,15 +529,15 @@ impl StratoVirtVM {
             }
         }
 
-        Err(Error::ResourceExhausted(format!("slot of rootport")))
+        Err(Error::ResourceExhausted("slot of rootport".to_string()))
     }
 
-    fn create_vitiofs_daemon(&mut self, daemon_path: &str, base_dir: &str) {
+    fn create_vitiofs_daemon(&mut self, daemon_path: &str, base_dir: &str, shared_path: &str) {
         self.virtiofs_daemon = Some(VirtiofsDaemon {
             path: daemon_path.to_string(),
             log_path: format!("{}/virtiofs.log", base_dir),
             socket_path: format!("{}/virtiofs.sock", base_dir),
-            shared_dir: base_dir.to_string(),
+            shared_dir: shared_path.to_string(),
             pid: None,
         });
     }
@@ -503,4 +549,18 @@ impl StratoVirtVM {
             .start()
             .map_err(|e| Error::Other(anyhow!("start virtiofs daemon process failed: {}", e)))
     }
+}
+
+impl_recoverable!(StratoVirtVM);
+
+pub async fn init_stratovirt_sandboxer(
+) -> Result<KuasarSandboxer<StratoVirtVMFactory, StratoVirtHooks>> {
+    let (config, persist_dir_path) =
+        load_config::<StratoVirtVMConfig>(CONFIG_STRATOVIRT_PATH).await?;
+    let hooks = StratoVirtHooks::new(config.hypervisor.clone());
+    let mut s = KuasarSandboxer::new(config.sandbox, config.hypervisor, hooks);
+    if !persist_dir_path.is_empty() {
+        s.recover(&persist_dir_path).await?;
+    }
+    Ok(s)
 }

@@ -14,15 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use async_trait::async_trait;
 use containerd_sandbox::{
     error::{Error, Result},
     SandboxOption,
 };
-use serde::Serialize;
-use serde_derive::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::watch::Receiver;
 
 use crate::{
@@ -70,6 +69,28 @@ pub trait VM: Serialize + Sync + Send {
     async fn ping(&self) -> Result<()>;
     fn socket_address(&self) -> String;
     async fn wait_channel(&self) -> Option<Receiver<(u32, i128)>>;
+    async fn vcpus(&self) -> Result<VcpuThreads>;
+    fn pids(&self) -> Pids;
+}
+
+#[macro_export]
+macro_rules! impl_recoverable {
+    ($ty:ty) => {
+        #[async_trait]
+        impl $crate::vm::Recoverable for $ty {
+            async fn recover(&mut self) -> Result<()> {
+                self.client = Some(self.create_client().await?);
+                let pid = self.pid()?;
+                let (tx, rx) = channel((0u32, 0i128));
+                tokio::spawn(async move {
+                    let wait_result = wait_pid(pid as i32).await;
+                    tx.send(wait_result).unwrap_or_default();
+                });
+                self.wait_chan = Some(rx);
+                Ok(())
+            }
+        }
+    };
 }
 
 #[async_trait]
@@ -91,6 +112,10 @@ pub struct HypervisorCommonConfig {
     pub initrd_path: String,
     #[serde(default)]
     pub kernel_params: String,
+    #[serde(default)]
+    pub firmware: String,
+    #[serde(default)]
+    pub enable_mem_prealloc: bool,
 }
 
 impl Default for HypervisorCommonConfig {
@@ -100,9 +125,11 @@ impl Default for HypervisorCommonConfig {
             vcpus: 1,
             memory_in_mb: 1024,
             kernel_path: "/var/lib/kuasar/vmlinux.bin".to_string(),
-            image_path: "/var/lib/kuasar/kuasar.img".to_string(),
+            image_path: "".to_string(),
             initrd_path: "".to_string(),
             kernel_params: "".to_string(),
+            firmware: "".to_string(),
+            enable_mem_prealloc: false,
         }
     }
 }
@@ -173,4 +200,15 @@ impl FromStr for ShareFsType {
             _ => Err(Error::InvalidArgument(s.to_string())),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct VcpuThreads {
+    pub vcpus: HashMap<i64, i64>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct Pids {
+    pub vmm_pid: Option<u32>,
+    pub affilicated_pids: Vec<u32>,
 }

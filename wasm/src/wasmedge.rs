@@ -23,6 +23,7 @@ use std::{
     sync::Arc,
 };
 
+use cgroups_rs::{Cgroup, CgroupPid};
 use containerd_shim::{
     api::{CreateTaskRequest, ExecProcessRequest, Status},
     asynchronous::{
@@ -35,7 +36,7 @@ use containerd_shim::{
     error::Error,
     io::Stdio,
     monitor::{Subject, Topic},
-    other_error,
+    other, other_error,
     processes::Process,
     protos::{cgroups::metrics::Metrics, shim::oci::Options, types::task::ProcessInfo},
     ExitSignal,
@@ -55,6 +56,8 @@ use wasmedge_sdk::{
     params, PluginManager, Vm,
 };
 
+use crate::utils::{get_args, get_cgroup_path, get_envs, get_preopens, get_rootfs};
+
 pub type ExecProcess = ProcessTemplate<WasmEdgeExecLifecycle>;
 pub type InitProcess = ProcessTemplate<WasmEdgeInitLifecycle>;
 
@@ -65,12 +68,12 @@ pub struct ExecFactory {}
 pub struct WasmEdgeExecLifecycle {}
 
 pub struct WasmEdgeInitLifecycle {
-    opts: Options,
-    bundle: String,
+    _opts: Options,
+    _bundle: String,
     spec: Spec,
     prototype_vm: Vm,
     netns: String,
-    exit_signal: Arc<ExitSignal>,
+    _exit_signal: Arc<ExitSignal>,
 }
 
 pub struct WasmEdgeContainerFactory {
@@ -113,16 +116,12 @@ impl ContainerFactory<WasmEdgeContainer> for WasmEdgeContainerFactory {
         let mut spec: Spec = read_spec(req.bundle()).await?;
         spec.canonicalize_rootfs(req.bundle())
             .map_err(|e| Error::InvalidArgument(format!("could not canonicalize rootfs: {e}")))?;
-        let rootfs = spec
-            .root()
-            .as_ref()
-            .ok_or(Error::InvalidArgument(
-                "rootfs is not set in runtime spec".to_string(),
-            ))?
-            .path();
-        mkdir(rootfs, 0o711).await?;
+        let rootfs = get_rootfs(&spec).ok_or_else(|| {
+            Error::InvalidArgument("rootfs is not set in runtime spec".to_string())
+        })?;
+        mkdir(&rootfs, 0o711).await?;
         for m in req.rootfs() {
-            mount_rootfs(m, rootfs.as_path()).await?
+            mount_rootfs(m, &rootfs).await?
         }
         let stdio = Stdio::new(req.stdin(), req.stdout(), req.stderr(), req.terminal);
         let exit_signal = Arc::new(Default::default());
@@ -131,9 +130,9 @@ impl ContainerFactory<WasmEdgeContainer> for WasmEdgeContainerFactory {
             req.id(),
             stdio,
             WasmEdgeInitLifecycle {
-                opts: Default::default(),
-                bundle: req.bundle.to_string(),
-                exit_signal,
+                _opts: Default::default(),
+                _bundle: req.bundle.to_string(),
+                _exit_signal: exit_signal,
                 spec,
                 prototype_vm: self.prototype_vm.clone(),
                 netns,
@@ -160,14 +159,10 @@ impl ProcessLifecycle<InitProcess> for WasmEdgeInitLifecycle {
         let vm = p.lifecycle.prototype_vm.clone();
         let args = get_args(spec);
         let envs = get_envs(spec);
-        let rootfs = spec
-            .root()
-            .as_ref()
-            .ok_or(Error::InvalidArgument(
-                "rootfs is not set in runtime spec".to_string(),
-            ))?
-            .path();
-        let mut preopens = vec![format!("/:{}", rootfs.display())];
+        let rootfs = get_rootfs(spec).ok_or_else(|| {
+            Error::InvalidArgument("rootfs is not set in runtime spec".to_string())
+        })?;
+        let mut preopens = vec![format!("/:{}", rootfs)];
         preopens.append(&mut get_preopens(spec));
 
         debug!(
@@ -186,6 +181,18 @@ impl ProcessLifecycle<InitProcess> for WasmEdgeInitLifecycle {
                 p.pid = init_pid;
             }
             ForkResult::Child => {
+                if let Some(cgroup_path) = get_cgroup_path(spec) {
+                    // Add child process to Cgroup
+                    Cgroup::new(
+                        cgroups_rs::hierarchies::auto(),
+                        cgroup_path.trim_start_matches('/'),
+                    )
+                    .and_then(|cgroup| cgroup.add_task(CgroupPid::from(std::process::id() as u64)))
+                    .map_err(other_error!(
+                        e,
+                        format!("failed to add task to cgroup: {}", cgroup_path)
+                    ))?;
+                }
                 match run_wasi_func(vm, args, envs, preopens, p) {
                     Ok(_) => exit(0),
                     // TODO add a pipe? to return detailed error message
@@ -214,7 +221,19 @@ impl ProcessLifecycle<InitProcess> for WasmEdgeInitLifecycle {
         Ok(())
     }
 
-    async fn delete(&self, _p: &mut InitProcess) -> containerd_shim::Result<()> {
+    async fn delete(&self, p: &mut InitProcess) -> containerd_shim::Result<()> {
+        if let Some(cgroup_path) = get_cgroup_path(&p.lifecycle.spec) {
+            // Add child process to Cgroup
+            Cgroup::load(
+                cgroups_rs::hierarchies::auto(),
+                cgroup_path.trim_start_matches('/'),
+            )
+            .delete()
+            .map_err(other_error!(
+                e,
+                format!("failed to delete cgroup: {}", cgroup_path)
+            ))?;
+        }
         Ok(())
     }
 
@@ -228,10 +247,18 @@ impl ProcessLifecycle<InitProcess> for WasmEdgeInitLifecycle {
         ))
     }
 
-    async fn stats(&self, _p: &InitProcess) -> containerd_shim::Result<Metrics> {
-        Err(Error::Unimplemented(
-            "exec not supported for wasm containers".to_string(),
-        ))
+    async fn stats(&self, p: &InitProcess) -> containerd_shim::Result<Metrics> {
+        debug!("get stats of process {}", p.pid);
+        if p.pid <= 0 {
+            return Err(other!(
+                "failed to collect metrics because init process is {}",
+                p.pid
+            ));
+        }
+        // Because Wasm Applications execute the instructions inside the host Wasm
+        // Runtime, we should read the metrics from Cgroup for the CPU, memory,
+        // and filesystem usage.
+        containerd_shim::cgroup::collect_metrics(p.pid as u32)
     }
 
     async fn ps(&self, p: &InitProcess) -> containerd_shim::Result<Vec<ProcessInfo>> {
@@ -261,9 +288,7 @@ impl ProcessLifecycle<ExecProcess> for WasmEdgeExecLifecycle {
     }
 
     async fn delete(&self, _p: &mut ExecProcess) -> containerd_shim::Result<()> {
-        Err(Error::Unimplemented(
-            "exec not supported for wasm containers".to_string(),
-        ))
+        Ok(())
     }
 
     async fn update(
@@ -296,48 +321,6 @@ impl ProcessFactory<ExecProcess> for ExecFactory {
             "exec not supported for wasm containers".to_string(),
         ))
     }
-}
-
-pub fn get_preopens(spec: &Spec) -> Vec<String> {
-    let mut preopens = vec![];
-    if let Some(mounts) = spec.mounts() {
-        for m in mounts {
-            if let Some(typ) = m.typ() {
-                if typ == "bind" && m.source().is_some() {
-                    preopens.push(format!(
-                        "{}:{}",
-                        m.destination().display(),
-                        m.source().as_ref().unwrap().display()
-                    ));
-                }
-            }
-        }
-    }
-    preopens
-}
-
-pub fn get_envs(spec: &Spec) -> Vec<String> {
-    let empty_envs = vec![];
-    let envs = spec
-        .process()
-        .as_ref()
-        .unwrap()
-        .env()
-        .as_ref()
-        .unwrap_or(&empty_envs);
-    envs.to_vec()
-}
-
-pub fn get_args(spec: &Spec) -> Vec<String> {
-    let empty_args = vec![];
-    let args = spec
-        .process()
-        .as_ref()
-        .unwrap()
-        .args()
-        .as_ref()
-        .unwrap_or(&empty_args);
-    args.to_vec()
 }
 
 pub fn maybe_open_stdio(path: &str) -> Result<Option<RawFd>, std::io::Error> {

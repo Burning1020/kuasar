@@ -1,43 +1,78 @@
 # Roadmap
 
-| Sandboxer      | Sandbox          | 2023 H1 | 2023 H2 | 2024 H1 |
-|----------------|------------------|---------|---------|---------|
-| **MicroVM**    | Cloud Hypervisor | ¡Ì       |         |         |
-|                | QEMU             | ¡Ì       |         |         |
-|                | StratoVirt       | ¡Ì       |         |         |
-|                | Firecracker      |         |         | ¡Ì       |
-| **App Kernel** | Quark            | ¡Ì       |         |         |
-|                | gVisor           |         |         | ¡Ì       |
-| **Wasm**       | WasmEdge         | ¡Ì       |         |         |
-|                | Wasmtime         |         | ¡Ì       |         |
-| **runC**       | runC             |         | ¡Ì       |         |
-
+This document defines a high level roadmap for Kuasar development.
 
 ## 2023 H1
 
-+ Release v0.1
-+ Support parts of mainstream sandbox, i.e. Cloud Hypervisor, QEMU, StratoVirt, WasmEdge, Quark
-+ Support connection of containerd and iSulad via Sandbox API
+### Core framework
+
+#### Sandbox API
++ Define and develop new Sandbox API with containerd team
+
+#### Integration of high-level container runtime
++ Containerd (of Kuasar community)
++ Containerd (of Containerd community with kuasar-shim)
++ iSulad
+
+#### Sandbox and container management
++ Cloud Hypervisor
++ QEMU
++ StratoVirt
++ WasmEdge
++ QuarkContainer
+
+### Test
++ Performance testing towards on startup time and memory overhead of kuasar vmm sandbox
 
 ## 2023 H2
 
-+ Support runC container
-+ Support Wasmtime
-+ Start the process of donating projects to CNCF
+### Core framework
 
-## 2024 H1
+#### Integration of high-level container runtime
++ Containerd (of Containerd community)
 
-+ Release v1.0
-+ Support more sandboxes, i.e. gVisor, Firecracker
-+ Develop a CLI tool for operation and maintenance.
+#### Sandbox and container management
++ Wasmtime
++ Runc
 
-## 2024 H2
+#### Kubernetes feature support
++ Support Kubernetes Dynamic Resource Allocation (DRA) and Node Resource Interface (NRI)
++ Support Evented PLEG
 
-+ Support running in Arm64.
-+ Enhance on image distribution.
+#### Enhancement features
++ Support CgroupV2
+
+### Maintainability
++ More observabilities to the project by opentracing
++ Enhancement of sandboxer recovery
+
+### Security
++ Complete security vulnerability scanning
+
+### Test
++ Building e2e test workflow with more scenarios
+
+## 2024
+
+### Core framework
+
+#### Sandbox and container management
++ gVisor
++ Firecracker
+
+#### Enhancement features
++ Support CgroupV2
++ Running vm on Container OS
+
+#### Kubernetes feature support
++ Container checkpointing
++ In-place Update of Pod Resources
+
+### Maintainability
++ Develop CLI tool for operation and maintenance
 
 ## 2025
 
-+ Release v2.0
-+ Support eBPF observation.
-+ TBD
+### Enhancement features
++ Image distribution
++ eBPF observation

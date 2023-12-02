@@ -36,6 +36,8 @@ use tokio::{
 
 #[cfg(feature = "wasmedge")]
 use crate::wasmedge::{process_exits, WasmEdgeContainer, WasmEdgeContainerFactory};
+#[cfg(feature = "wasmtime")]
+use crate::wasmtime::{exec_exits, WasmtimeContainer, WasmtimeContainerFactory};
 
 #[derive(Default)]
 pub struct WasmSandboxer {
@@ -44,7 +46,7 @@ pub struct WasmSandboxer {
 }
 
 pub struct WasmSandbox {
-    pub(crate) id: String,
+    pub(crate) _id: String,
     pub(crate) base_dir: String,
     pub(crate) data: SandboxData,
     pub(crate) status: SandboxStatus,
@@ -63,7 +65,7 @@ impl Sandboxer for WasmSandboxer {
 
     async fn create(&self, id: &str, s: SandboxOption) -> Result<()> {
         let sandbox = WasmSandbox {
-            id: id.to_string(),
+            _id: id.to_string(),
             base_dir: s.base_dir,
             data: s.sandbox,
             status: SandboxStatus::Created,
@@ -86,13 +88,13 @@ impl Sandboxer for WasmSandboxer {
     }
 
     async fn sandbox(&self, id: &str) -> Result<Arc<Mutex<Self::Sandbox>>> {
-        return Ok(self
+        Ok(self
             .sandboxes
             .read()
             .await
             .get(id)
             .ok_or_else(|| Error::NotFound(id.to_string()))?
-            .clone());
+            .clone())
     }
 
     async fn stop(&self, id: &str, _force: bool) -> Result<()> {
@@ -171,6 +173,30 @@ impl WasmSandbox {
         });
         Ok(task)
     }
+
+    #[cfg(feature = "wasmtime")]
+    async fn start_task_service(
+        &self,
+    ) -> Result<TaskService<WasmtimeContainerFactory, WasmtimeContainer>> {
+        let (tx, mut rx) = channel(128);
+        let factory = WasmtimeContainerFactory {
+            netns: self.data.netns.clone(),
+        };
+        let task = TaskService {
+            factory,
+            containers: Arc::new(Default::default()),
+            namespace: "k8s.io".to_string(),
+            exit: Arc::new(Default::default()),
+            tx: tx.clone(),
+        };
+        exec_exits(&task).await;
+        tokio::spawn(async move {
+            while let Some((_topic, e)) = rx.recv().await {
+                debug!("received event {:?}", e);
+            }
+        });
+        Ok(task)
+    }
 }
 
 #[async_trait]
@@ -186,9 +212,9 @@ impl Sandbox for WasmSandbox {
     }
 
     async fn container(&self, id: &str) -> Result<&Self::Container> {
-        return self.containers.get(id).ok_or(Error::NotFound(format!(
+        self.containers.get(id).ok_or(Error::NotFound(format!(
             "failed to find container by id {id}"
-        )));
+        )))
     }
 
     async fn append_container(&mut self, id: &str, option: ContainerOption) -> Result<()> {
