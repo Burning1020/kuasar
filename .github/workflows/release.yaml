@@ -95,6 +95,19 @@ jobs:
           name: wasm-sandboxer ${{ matrix.features }}
           path: bin/wasm-sandboxer
 
+  runc:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build runc
+        run: make runc
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: runc
+          path: bin/runc-sandboxer
+
   containerd:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
@@ -120,6 +133,7 @@ jobs:
       - kernel
       - quark
       - wasm
+      - runc
       - containerd
     runs-on: ubuntu-22.04
     steps:
