@@ -74,3 +74,11 @@ jobs:
           RUST_BACKTRACE: full
         working-directory: ${{ matrix.directories }}
         run: sudo -E $(command -v cargo) test ${{ matrix.features }}
+
+  license-header-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check License Header
+        uses: apache/skywalking-eyes/header@main      # always prefer to use a revision instead of `main`.

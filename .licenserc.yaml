@@ -1,0 +1,12 @@
+header:
+  license:
+    spdx-id: Apache-2.0
+    copyright-owner: The Kuasar Authors
+    copyright-year: '2022'
+
+  paths:
+    - '**/*.rs'
+    - '**/*.proto'
+    - '**/*.sh'
+
+  comment: on-failure
