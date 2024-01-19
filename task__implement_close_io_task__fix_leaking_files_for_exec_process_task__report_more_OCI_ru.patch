@@ -1,0 +1,258 @@
+Subject: [PATCH] task: implement close_io
+task: fix leaking files for exec process
+task: report more OCI runtime errors
+---
+Index: vmm/task/src/container.rs
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/vmm/task/src/container.rs b/vmm/task/src/container.rs
+--- a/vmm/task/src/container.rs	(revision 9877880f9785b6ba15d4a77093031d624626e172)
++++ b/vmm/task/src/container.rs	(revision a1f5ef347ac86adae275932dc9774d00a9a63250)
+@@ -52,6 +52,7 @@
+     process::Command,
+     sync::Mutex,
+ };
++use tokio::fs::remove_file;
+ use vmm_common::{mount::get_mount_type, storage::Storage, KUASAR_STATE_DIR};
+ 
+ use crate::{
+@@ -245,16 +246,31 @@
+ }
+ 
+ // runtime_error will read the OCI runtime logfile retrieving OCI runtime error
+-pub async fn runtime_error(bundle: &str, e: runc::error::Error, msg: &str) -> Error {
++pub async fn runtime_error(bundle: &str, r_err: runc::error::Error, msg: &str) -> Error {
++    match get_last_runtime_error(bundle).await {
++        Err(e) => other!("{}: unable to retrieve OCI runtime error ({}): {}", msg, e, r_err),
++        Ok(rt_msg) => {
++            return if rt_msg.is_empty() {
++                other!("{}: empty msg in log file: {}", msg, r_err)
++            } else {
++                other!("{}: {}", msg, rt_msg)
++            }
++        },
++    }
++}
++
++async fn get_last_runtime_error(bundle: &str) -> Result<String> {
++    let log_path = Path::new(bundle).join("log.json");
+     let mut rt_msg = String::new();
+-    match File::open(Path::new(bundle).join("log.json")).await {
+-        Err(err) => other!("{}: unable to open OCI runtime log file){}", msg, err),
++    // Use match because `await` is not allowed inside lambda
++    match File::open(log_path).await {
++        Err(e) => Err(other!("unable to open OCI runtime log file: {}", e)),
+         Ok(file) => {
+             let mut lines = BufReader::new(file).lines();
+             while let Ok(Some(line)) = lines.next_line().await {
+                 // Retrieve the last runtime error
+                 match serde_json::from_str::<Log>(&line) {
+-                    Err(err) => return other!("{}: unable to parse log msg: {}", msg, err),
++                    Err(e) => return Err(other!("unable to parse log msg: {}", e)),
+                     Ok(log) => {
+                         if log.level == "error" {
+                             rt_msg = log.msg.trim().to_string();
+@@ -262,11 +278,7 @@
+                     }
+                 }
+             }
+-            if !rt_msg.is_empty() {
+-                other!("{}: {}", msg, rt_msg)
+-            } else {
+-                other!("{}: (no OCI runtime error in logfile) {}", msg, e)
+-            }
++            Ok(rt_msg)
+         }
+     }
+ }
+@@ -298,6 +310,7 @@
+                 spec: p,
+                 exit_signal: Default::default(),
+             }),
++            stdin: Arc::new(Mutex::new(None)),
+         })
+     }
+ }
+@@ -305,10 +318,9 @@
+ #[async_trait]
+ impl ProcessLifecycle<InitProcess> for KuasarInitLifecycle {
+     async fn start(&self, p: &mut InitProcess) -> containerd_shim::Result<()> {
+-        self.runtime
+-            .start(p.id.as_str())
+-            .await
+-            .map_err(other_error!(e, "failed start"))?;
++        if let Err(e) = self.runtime.start(p.id.as_str()).await {
++            return Err(runtime_error(&p.lifecycle.bundle, e, "OCI runtime start failed").await);
++        }
+         p.state = Status::RUNNING;
+         Ok(())
+     }
+@@ -319,31 +331,36 @@
+         signal: u32,
+         all: bool,
+     ) -> containerd_shim::Result<()> {
+-        self.runtime
++        if let Err(r_err) = self.runtime
+             .kill(
+                 p.id.as_str(),
+                 signal,
+                 Some(&runc::options::KillOpts { all }),
+             )
+             .await
+-            .map_err(|e| check_kill_error(e.to_string()))
++        {
++            let e = runtime_error(&p.lifecycle.bundle, r_err, "OCI runtime delete failed").await;
++
++            return Err(check_kill_error(e.to_string()));
++        }
++        Ok(())
+     }
+ 
+     async fn delete(&self, p: &mut InitProcess) -> containerd_shim::Result<()> {
+-        self.runtime
++        if let Err(e) = self
++            .runtime
+             .delete(
+                 p.id.as_str(),
+                 Some(&runc::options::DeleteOpts { force: true }),
+             )
+             .await
+-            .or_else(|e| {
+-                if !e.to_string().to_lowercase().contains("does not exist") {
+-                    Err(e)
+-                } else {
+-                    Ok(())
+-                }
+-            })
+-            .map_err(other_error!(e, "failed delete"))?;
++        {
++            if !e.to_string().to_lowercase().contains("does not exist") {
++                return Err(
++                    runtime_error(&p.lifecycle.bundle, e, "OCI runtime delete failed").await,
++                );
++            }
++        }
+         self.exit_signal.signal();
+         Ok(())
+     }
+@@ -416,7 +433,8 @@
+ impl ProcessLifecycle<ExecProcess> for KuasarExecLifecycle {
+     async fn start(&self, p: &mut ExecProcess) -> containerd_shim::Result<()> {
+         rescan_pci_bus().await?;
+-        let pid_path = Path::new(self.bundle.as_str()).join(format!("{}.pid", &p.id));
++        let bundle = self.bundle.to_string();
++        let pid_path = Path::new(&bundle).join(format!("{}.pid", &p.id));
+         let mut exec_opts = runc::options::ExecOpts {
+             io: None,
+             pid_file: Some(pid_path.to_owned()),
+@@ -441,7 +459,7 @@
+             if let Some(s) = socket {
+                 s.clean().await;
+             }
+-            return Err(other!("failed to start runc exec: {}", e));
++            return Err(runtime_error(&bundle, e, "OCI runtime exec failed").await);
+         }
+         copy_io_or_console(p, socket, pio, p.lifecycle.exit_signal.clone()).await?;
+         let pid = read_file_to_str(pid_path).await?.parse::<i32>()?;
+@@ -472,8 +490,10 @@
+         }
+     }
+ 
+-    async fn delete(&self, _p: &mut ExecProcess) -> containerd_shim::Result<()> {
++    async fn delete(&self, p: &mut ExecProcess) -> Result<()> {
+         self.exit_signal.signal();
++        let exec_pid_path = Path::new(self.bundle.as_str()).join(format!("{}.pid", p.id));
++        remove_file(exec_pid_path).await.unwrap_or_default();
+         Ok(())
+     }
+ 
+@@ -613,3 +633,41 @@
+         other!("unknown error after kill {}", emsg)
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use std::path::Path;
++
++    use containerd_shim::other;
++    use containerd_shim::util::{mkdir, write_str_to_file};
++    use nix::sys::stat::Mode;
++    use tokio::fs::remove_dir_all;
++
++    use crate::container::runtime_error;
++
++    #[tokio::test]
++    async fn test_runtime_error() {
++        let empty_err = other!("");
++        let log_json = "\
++        {\"level\":\"info\",\"msg\":\"hello word\",\"time\":\"2022-11-25\"}\n\
++        {\"level\":\"error\",\"msg\":\"failed error\",\"time\":\"2022-11-26\"}\n\
++        {\"level\":\"error\",\"msg\":\"panic\",\"time\":\"2022-11-27\"}\n\
++        ";
++        let test_dir = "/tmp/kuasar-test_runtime_error";
++        let _ = mkdir(test_dir, 0o711).await;
++        let test_log_file = Path::new(test_dir).join("log.json");
++        write_str_to_file(test_log_file.as_path(), log_json)
++            .await
++            .expect("write log json should not be error");
++
++        let expected_msg = "panic";
++        let actual_err = runtime_error(test_log_file.to_str().unwrap().as_ref(), empty_err, "test_runtime_error failed").await;
++        remove_dir_all(test_dir).await.expect("remove test dir");
++        assert!(
++            actual_err.to_string().contains(expected_msg),
++            "actual error \"{}\" should contains \"{}\"",
++            actual_err.to_string(),
++            expected_msg
++        );
++    }
++}
+Index: vmm/task/src/io.rs
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/vmm/task/src/io.rs b/vmm/task/src/io.rs
+--- a/vmm/task/src/io.rs	(revision 29d337e971e9319ac339829d10ae0f7cd7f22d90)
++++ b/vmm/task/src/io.rs	(revision a1f5ef347ac86adae275932dc9774d00a9a63250)
+@@ -127,7 +127,7 @@
+ ) -> Result<()> {
+     if p.stdio.terminal {
+         if let Some(console_socket) = socket {
+-            let console_result = copy_console(&console_socket, &p.stdio, exit_signal).await;
++            let console_result = copy_console(p, &console_socket, &p.stdio, exit_signal).await;
+             console_socket.clean().await;
+             match console_result {
+                 Ok(c) => {
+@@ -144,7 +144,8 @@
+     Ok(())
+ }
+ 
+-async fn copy_console(
++async fn copy_console<P>(
++    p: &ProcessTemplate<P>,
+     console_socket: &ConsoleSocket,
+     stdio: &Stdio,
+     exit_signal: Arc<ExitSignal>,
+@@ -155,6 +156,18 @@
+     let f = unsafe { File::from_raw_fd(fd) };
+     if !stdio.stdin.is_empty() {
+         debug!("copy_console: pipe stdin to console");
++
++        let stdin_clone = stdio.stdin.clone();
++        let stdin_w = p.stdin.clone();
++        // open the write side to make sure read side unblock, as open write side
++        // will block too, open it in another thread
++        tokio::spawn(async move {
++            if let Ok(stdin_file) = OpenOptions::new().write(true).open(stdin_clone).await {
++                let mut lock_guard = stdin_w.lock().await;
++                *lock_guard = Some(stdin_file);
++            }
++        });
++
+         let console_stdin = f
+             .try_clone()
+             .await
