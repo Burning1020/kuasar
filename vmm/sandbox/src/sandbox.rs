@@ -445,7 +445,11 @@ where
         let mut sb = serde_json::from_slice::<KuasarSandbox<V>>(content.as_slice())
             .map_err(|e| anyhow!("failed to deserialize sandbox, {}", e))?;
         if let SandboxStatus::Running(_) = sb.status {
-            sb.vm.recover().await?;
+            if let Err(e) = sb.vm.recover().await {
+                sb.vm.stop(true).await.unwrap_or_default();
+                warn!("failed to recover vm {}: {}, then force kill it!", sb.id, e);
+                return Err(e);
+            };
         }
         // recover the sandbox_cgroups in the sandbox object
         sb.sandbox_cgroups =

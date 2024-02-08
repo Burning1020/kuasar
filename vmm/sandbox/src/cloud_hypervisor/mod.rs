@@ -20,6 +20,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use containerd_sandbox::error::{Error, Result};
 use log::{debug, error, info};
+use nix::{sys::signal, unistd::Pid};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tokio::{
@@ -193,12 +194,25 @@ impl VM for CloudHypervisorVM {
     }
 
     async fn stop(&mut self, force: bool) -> Result<()> {
-        let pid = self.pid()?;
-        if pid == 0 {
-            return Ok(());
+        let signal = if force {
+            signal::SIGKILL
+        } else {
+            signal::SIGTERM
+        };
+
+        let pids = self.pids();
+        if let Some(vmm_pid) = pids.vmm_pid {
+            if vmm_pid > 0 {
+                signal::kill(Pid::from_raw(vmm_pid as i32), signal)
+                    .map_err(|e| anyhow!("kill vmm process {}: {}", vmm_pid, e))?;
+            }
         }
-        let signal = if force { 9 } else { 15 };
-        unsafe { nix::libc::kill(pid as i32, signal) };
+        for affilicated_pid in pids.affilicated_pids {
+            if affilicated_pid > 0 {
+                // affilicated process may exits automatically
+                signal::kill(Pid::from_raw(affilicated_pid as i32), signal).unwrap_or_default()
+            }
+        }
 
         Ok(())
     }
