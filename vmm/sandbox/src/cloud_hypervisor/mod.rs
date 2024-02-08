@@ -188,7 +188,7 @@ impl VM for CloudHypervisorVM {
 
         // update vmm related pids
         self.pids.vmm_pid = pid;
-        self.pids.affilicated_pids.push(virtiofsd_pid);
+        self.pids.affiliated_pids.push(virtiofsd_pid);
         // TODO: add child virtiofsd process
         Ok(pid.unwrap_or_default())
     }
@@ -207,10 +207,10 @@ impl VM for CloudHypervisorVM {
                     .map_err(|e| anyhow!("kill vmm process {}: {}", vmm_pid, e))?;
             }
         }
-        for affilicated_pid in pids.affilicated_pids {
-            if affilicated_pid > 0 {
-                // affilicated process may exits automatically
-                signal::kill(Pid::from_raw(affilicated_pid as i32), signal).unwrap_or_default()
+        for affiliated_pid in pids.affiliated_pids {
+            if affiliated_pid > 0 {
+                // affiliated process may exits automatically
+                signal::kill(Pid::from_raw(affiliated_pid as i32), signal).unwrap_or_default()
             }
         }
 
