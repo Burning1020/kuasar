@@ -703,7 +703,7 @@ mod tests {
 
         #[test]
         fn test_parse_empty_dns_option() {
-            let mut dns_test = DnsConfig::default();
+            let dns_test = DnsConfig::default();
             let resolv_content =
                 parse_dnsoptions(&dns_test.servers, &dns_test.searches, &dns_test.options);
             assert!(resolv_content.is_empty())
