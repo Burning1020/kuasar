@@ -14,6 +14,9 @@
   <a href="https://github.com/kuasar-io/kuasar/graphs/contributors">
     <img alt="GitHub contributors" src="https://img.shields.io/github/contributors/kuasar-io/kuasar?label=Contributors&style=flat-square">
   </a>
+  <a href="https://app.fossa.com/projects/git%2Bgithub.com%2Fkuasar-io%2Fkuasar?ref=badge_shield">
+    <img alt="FOSSA Status" src="https://app.fossa.com/api/projects/git%2Bgithub.com%2Fkuasar-io%2Fkuasar.svg?type=shield">
+  </a>
 </p>
 
 Kuasar is an efficient container runtime that provides cloud-native, all-scenario container solutions by supporting multiple sandbox techniques. Written in Rust, it offers a standard sandbox abstraction based on the sandbox API. Additionally, Kuasar provides an optimized framework to accelerate container startup and reduce unnecessary overheads.
@@ -114,7 +117,7 @@ Please also note that Quark requires a Linux kernel version >= 5.15.
   + It is recommended to install Cloud Hypervisor by default. You can find Cloud Hypervisor installation instructions [here](https://github.com/cloud-hypervisor/cloud-hypervisor/blob/main/docs/building.md).
   + If you want to run kuasar with iSulad container engine and StratoVirt hypervisor, you can refer to this guide [how-to-run-kuasar-with-isulad-and-stratovirt](docs/vmm/how-to-run-kuasar-with-isulad-and-stratovirt.md).
 + Quark: To use Quark, please refer to the installation instructions [here](docs/quark/README.md).
-+ WasmEdge: To start WebAssembly sandboxes, you need to install WasmEdge v0.11.2. Instructions for installing WasmEdge can be found in [install.html](https://wasmedge.org/book/en/quick_start/install.html).
++ WasmEdge: To start WebAssembly sandboxes, you need to install WasmEdge v0.13.5. Instructions for installing WasmEdge can be found in [install-a-specific-version-of-wasmedge](https://wasmedge.org/docs/start/install/#install-a-specific-version-of-wasmedge).
 
 ### 3. containerd
 

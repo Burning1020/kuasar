@@ -33,10 +33,9 @@ use vmm_common::{
 
 use crate::{
     device::{BlockDeviceInfo, DeviceInfo},
-    sandbox::KUASAR_GUEST_SHARE_DIR,
+    sandbox::{KuasarSandbox, KUASAR_GUEST_SHARE_DIR},
     storage::mount::{get_mount_info, is_bind, is_bind_shm, is_overlay},
     vm::{BlockDriver, VM},
-    KuasarSandbox,
 };
 
 pub mod mount;
@@ -65,7 +64,8 @@ where
         // handle tmpfs mount
         let mount_info = get_mount_info(&m.source).await?;
         if let Some(mi) = mount_info {
-            if mi.fs_type == "tmpfs" {
+            // Only allow use tmpfs in emptyDir
+            if mi.fs_type == "tmpfs" && mi.mount_point.contains("kubernetes.io~empty-dir") {
                 self.handle_tmpfs_mount(&id, container_id, m, &mi).await?;
                 return Ok(());
             }
@@ -318,7 +318,6 @@ where
 }
 
 pub struct MountInfo {
-    pub device: String,
     pub mount_point: String,
     pub fs_type: String,
     pub options: Vec<String>,

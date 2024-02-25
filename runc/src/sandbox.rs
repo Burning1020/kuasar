@@ -181,7 +181,7 @@ impl Sandboxer for RuncSandboxer {
             e
         })?;
 
-        sandbox.data.task_address = self.task_address.clone();
+        sandbox.data.task_address.clone_from(&self.task_address);
         sandbox.dump().await.map_err(|e| {
             kill(Pid::from_raw(sandbox_pid), Signal::SIGKILL).unwrap_or_default();
             e
@@ -255,6 +255,7 @@ impl RuncSandbox {
         let mut dump_file = OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&dump_path)
             .await
             .map_err(Error::IO)?;

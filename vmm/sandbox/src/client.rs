@@ -71,7 +71,7 @@ async fn new_ttrpc_client_with_timeout(address: &str, t: u64) -> Result<Client> 
             // sync, making the first time of future poll in timeout hang forever. As a result, the
             // timeout will hang too. To solve this, add a async function in this loop or call
             // `tokio::task::yield_now()` to give up current cpu time slice.
-            tokio::time::sleep(Duration::from_millis(1)).await;
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
     };
 
@@ -281,10 +281,8 @@ pub(crate) fn client_sync_clock(
         };
 
         tokio::select! {
-            _ = fut => return,
-            _ = exit_signal.wait() => {
-                return
-            },
+            _ = fut => (),
+            _ = exit_signal.wait() => {},
         }
     });
 }

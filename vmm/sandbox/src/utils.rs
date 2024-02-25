@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 use std::{
+    mem,
     os::{
         fd::IntoRawFd,
         unix::{
@@ -66,7 +67,7 @@ pub fn get_netns(data: &SandboxData) -> String {
         if let Some(l) = &spec.linux {
             for ns in &l.namespaces {
                 if ns.r#type == NET_NAMESPACE {
-                    netns = ns.path.clone();
+                    netns.clone_from(&ns.path);
                 }
             }
         }
@@ -395,7 +396,7 @@ pub fn vec_to_string<T: ToString>(v: &[T]) -> String {
         .join(":")
 }
 
-pub fn fds_to_vectors<T>(fds: &Vec<T>) -> String {
+pub fn fds_to_vectors<T>(fds: &[T]) -> String {
     (2 * fds.len() + 2).to_string()
 }
 
@@ -457,8 +458,7 @@ pub fn set_cmd_netns(cmd: &mut Command, netns: String) -> Result<()> {
 pub fn set_cmd_fd(cmd: &mut Command, mut fds: Vec<OwnedFd>) -> Result<()> {
     unsafe {
         cmd.pre_exec(move || {
-            let drain_fds: Vec<OwnedFd> = fds.drain(..).collect();
-            for (i, fd) in drain_fds.into_iter().enumerate() {
+            for (i, fd) in mem::take(&mut fds).into_iter().enumerate() {
                 let new_fd = (3 + i) as RawFd;
 
                 // Closing the fd when its lifecycle finished is unsafe, so transfer it into RawFD

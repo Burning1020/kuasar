@@ -31,9 +31,7 @@ use tokio::{
 };
 use vmm_common::SHARED_DIR_SUFFIX;
 
-use self::{factory::CloudHypervisorVMFactory, hooks::CloudHypervisorHooks};
 use crate::{
-    args::Args,
     cloud_hypervisor::{
         client::ChClient,
         config::{CloudHypervisorConfig, CloudHypervisorVMConfig, VirtiofsdConfig},
@@ -42,9 +40,7 @@ use crate::{
         },
     },
     device::{BusType, DeviceInfo},
-    impl_recoverable, load_config,
     param::ToCmdLineParams,
-    sandbox::KuasarSandboxer,
     utils::{read_std, set_cmd_fd, set_cmd_netns, wait_channel, wait_pid, write_file_atomic},
     vm::{Pids, VcpuThreads, VM},
 };
@@ -56,7 +52,6 @@ pub mod factory;
 pub mod hooks;
 
 const VCPU_PREFIX: &str = "vcpu";
-pub const CONFIG_CLH_PATH: &str = "/var/lib/kuasar/config_clh.toml";
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct CloudHypervisorVM {
@@ -103,7 +98,7 @@ impl CloudHypervisorVM {
         }
     }
 
-    pub fn add_device(&mut self, device: impl CloudHypervisorDevice + Sync + Send + 'static) {
+    pub fn add_device(&mut self, device: impl CloudHypervisorDevice + 'static) {
         self.devices.push(Box::new(device));
     }
 
@@ -148,7 +143,6 @@ impl CloudHypervisorVM {
         self.fds.len() - 1 + 3
     }
 
-
     async fn wait_stop(&mut self, t: Duration) -> Result<()> {
         if let Some(rx) = self.wait_channel().await {
             let (_, ts) = *rx.borrow();
@@ -186,10 +180,6 @@ impl VM for CloudHypervisorVM {
             set_cmd_netns(&mut cmd, self.netns.to_string())?;
             cmd.stdout(Stdio::piped());
             cmd.stderr(Stdio::piped());
-
-            if self.enable_console_socket {
-                self.read_console();
-            }
             info!("start cloud hypervisor with cmdline: {:?}", cmd);
             cmd.spawn()
                 .map_err(|e| anyhow!("failed to spawn cloud hypervisor command: {}", e))?
@@ -335,7 +325,20 @@ impl VM for CloudHypervisorVM {
     }
 }
 
-impl_recoverable!(CloudHypervisorVM);
+#[async_trait]
+impl crate::vm::Recoverable for CloudHypervisorVM {
+    async fn recover(&mut self) -> Result<()> {
+        self.client = Some(self.create_client().await?);
+        let pid = self.pid()?;
+        let (tx, rx) = channel((0u32, 0i128));
+        tokio::spawn(async move {
+            let wait_result = wait_pid(pid as i32).await;
+            tx.send(wait_result).unwrap_or_default();
+        });
+        self.wait_chan = Some(rx);
+        Ok(())
+    }
+}
 
 macro_rules! read_stdio {
     ($stdio:expr, $cmd_name:ident) => {
@@ -390,17 +393,4 @@ fn spawn_wait(
             }
         }
     })
-}
-
-pub async fn init_cloud_hypervisor_sandboxer(
-    args: &Args,
-) -> Result<KuasarSandboxer<CloudHypervisorVMFactory, CloudHypervisorHooks>> {
-    let (config, persist_dir_path) =
-        load_config::<CloudHypervisorVMConfig>(args, CONFIG_CLH_PATH).await?;
-    let hooks = CloudHypervisorHooks {};
-    let mut s = KuasarSandboxer::new(config.sandbox, config.hypervisor, hooks);
-    if !persist_dir_path.is_empty() {
-        s.recover(&persist_dir_path).await?;
-    }
-    Ok(s)
 }

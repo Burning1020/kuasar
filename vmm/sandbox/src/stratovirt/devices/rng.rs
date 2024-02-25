@@ -45,7 +45,7 @@ pub struct VirtioRngDevice {
 }
 
 impl_device_no_bus!(VirtioRngDevice);
-impl_set_get_device_addr!(VirtioRngDevice);
+impl_set_device_addr!(VirtioRngDevice);
 
 impl VirtioRngDevice {
     pub fn new(id: &str, filename: &str, transport: Transport, bus: &str) -> Self {
@@ -70,7 +70,7 @@ mod tests {
         device::Transport,
         param::ToCmdLineParams,
         stratovirt::devices::{
-            device::GetAndSetDeviceAddr, DEFAULT_PCIE_BUS, VIRTIO_RND_DEVICE_ADDR,
+            device::SetDeviceAddr, tests::VIRTIO_RND_DEVICE_ADDR, DEFAULT_PCIE_BUS,
         },
     };
 
@@ -79,13 +79,14 @@ mod tests {
         let mut virtio_rng_device =
             VirtioRngDevice::new("rng0", "/dev/urandom", Transport::Pci, DEFAULT_PCIE_BUS);
         virtio_rng_device.set_device_addr(VIRTIO_RND_DEVICE_ADDR);
-        let virtio_rng_device_cmd_params = virtio_rng_device.to_cmdline_params("-");
+        let mut virtio_rng_device_cmd_params = virtio_rng_device.to_cmdline_params("-");
+        virtio_rng_device_cmd_params.sort();
         println!(
             "virtio-rng device params: {:?}",
             virtio_rng_device_cmd_params
         );
 
-        let expected_params: Vec<String> = vec![
+        let mut expected_params: Vec<String> = vec![
             "-object",
             "rng-random,id=rng0,filename=/dev/urandom",
             "-device",
@@ -94,6 +95,8 @@ mod tests {
         .iter()
         .map(|s| s.to_string())
         .collect();
-        assert!(true);
+        expected_params.sort();
+
+        assert_eq!(expected_params, virtio_rng_device_cmd_params);
     }
 }
