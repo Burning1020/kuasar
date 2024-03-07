@@ -42,7 +42,7 @@ use crate::network::{NetworkInterface, Route};
 
 const HVSOCK_RETRY_TIMEOUT_IN_MS: u64 = 10;
 // TODO: reduce to 10s
-const NEW_TTRPC_CLIENT_TIMEOUT: u64 = 30;
+const NEW_TTRPC_CLIENT_TIMEOUT: u64 = 45;
 const TIME_SYNC_PERIOD: u64 = 60;
 const TIME_DIFF_TOLERANCE_IN_MS: u64 = 10;
 

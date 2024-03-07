@@ -20,7 +20,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use containerd_sandbox::error::{Error, Result};
 use log::{debug, error, info};
-use nix::{sys::signal, unistd::Pid};
+use nix::{errno::Errno::ESRCH, sys::signal, unistd::Pid};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tokio::{
@@ -203,14 +203,19 @@ impl VM for CloudHypervisorVM {
         let pids = self.pids();
         if let Some(vmm_pid) = pids.vmm_pid {
             if vmm_pid > 0 {
-                signal::kill(Pid::from_raw(vmm_pid as i32), signal)
-                    .map_err(|e| anyhow!("kill vmm process {}: {}", vmm_pid, e))?;
+                // TODO: Consider pid reused
+                match signal::kill(Pid::from_raw(vmm_pid as i32), signal) {
+                    Err(e) if e != ESRCH => {
+                        return Err(anyhow!("kill vmm process {}: {}", vmm_pid, e).into());
+                    }
+                    _ => {}
+                }
             }
         }
         for affiliated_pid in pids.affiliated_pids {
             if affiliated_pid > 0 {
-                // affiliated process may exits automatically
-                signal::kill(Pid::from_raw(affiliated_pid as i32), signal).unwrap_or_default()
+                // affiliated process may exits automatically, so it's ok not handle error
+                signal::kill(Pid::from_raw(affiliated_pid as i32), signal).unwrap_or_default();
             }
         }
 

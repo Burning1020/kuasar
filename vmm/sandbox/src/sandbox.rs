@@ -52,35 +52,6 @@ use crate::{
 
 pub const KUASAR_GUEST_SHARE_DIR: &str = "/run/kuasar/storage/containers/";
 
-macro_rules! _monitor {
-    ($sb:ident) => {
-        tokio::spawn(async move {
-            let mut rx = {
-                let sandbox = $sb.lock().await;
-                if let SandboxStatus::Running(_) = sandbox.status.clone() {
-                    sandbox.vm.wait_channel().await.unwrap()
-                } else {
-                    error!("can not get wait channel when sandbox is running");
-                    return;
-                }
-            };
-
-            let (code, ts) = *rx.borrow();
-            if ts == 0 {
-                rx.changed().await.unwrap_or_default();
-                let (code, ts) = *rx.borrow();
-                let mut sandbox = $sb.lock().await;
-                sandbox.status = SandboxStatus::Stopped(code, ts);
-                sandbox.exit_signal.signal();
-            } else {
-                let mut sandbox = $sb.lock().await;
-                sandbox.status = SandboxStatus::Stopped(code, ts);
-                sandbox.exit_signal.signal();
-            }
-        });
-    };
-}
-
 pub struct KuasarSandboxer<F: VMFactory, H: Hooks<F::VM>> {
     factory: F,
     hooks: H,
@@ -448,6 +419,7 @@ where
             if let Err(e) = sb.vm.recover().await {
                 sb.vm.stop(true).await.unwrap_or_default();
                 warn!("failed to recover vm {}: {}, then force kill it!", sb.id, e);
+                sb.destroy_network().await;
                 return Err(e);
             };
         }
@@ -482,12 +454,14 @@ where
 
     async fn stop(&mut self, force: bool) -> Result<()> {
         match self.status {
-            // If sandbox is created but not running, no need to stop.
-            SandboxStatus::Created => {
-                return Ok(());
-            }
+            // If a sandbox is created:
+            // 1. Just Created, vmm is not running: pid is zero, destroy network
+            // 2. Created and vmm is running: kill process and destroy network
+            // 3. Created and vmm is exited abnormally after running: status is Stopped, destroy network
+            SandboxStatus::Created => {}
             SandboxStatus::Running(_) => {}
             SandboxStatus::Stopped(_, _) => {
+                self.destroy_network().await;
                 return Ok(());
             }
             _ => {
@@ -508,9 +482,7 @@ where
         }
 
         self.vm.stop(force).await?;
-        if let Some(network) = self.network.as_mut() {
-            network.destroy().await;
-        }
+        self.destroy_network().await;
         Ok(())
     }
 
@@ -533,6 +505,7 @@ where
                 return Err(anyhow!("VM address is empty").into());
             }
             let client = new_sandbox_client(&addr).await?;
+            debug!("connected to task server {}", self.id);
             client_check(&client).await?;
             *client_guard = Some(client)
         }
@@ -608,6 +581,12 @@ where
 
     pub fn get_sandbox_shared_path(&self) -> String {
         format!("{}/{}", self.base_dir, SHARED_DIR_SUFFIX)
+    }
+
+    pub async fn destroy_network(&mut self) {
+        if let Some(mut network) = self.network.take() {
+            network.destroy().await;
+        }
     }
 }
 
