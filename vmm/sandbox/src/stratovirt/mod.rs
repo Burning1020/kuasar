@@ -45,7 +45,8 @@ use self::{
     hooks::StratoVirtHooks,
 };
 use crate::{
-    device::{Bus, BusType, DeviceInfo, Slot, SlotStatus, Transport},
+    args::Args,
+    device::{Bus, BusType, DeviceInfo, Slot, SlotStatus},
     impl_recoverable, load_config,
     param::ToCmdLineParams,
     sandbox::KuasarSandboxer,
@@ -200,7 +201,7 @@ impl VM for StratoVirtVM {
                     .id(&tap_info.id)
                     .name(&tap_info.name)
                     .mac_address(&tap_info.mac_address)
-                    .transport(Transport::Pci)
+                    .transport(self.config.machine.transport())
                     .fds(fd_ints)
                     .vhost(false)
                     .vhostfds(vec![])
@@ -554,9 +555,10 @@ impl StratoVirtVM {
 impl_recoverable!(StratoVirtVM);
 
 pub async fn init_stratovirt_sandboxer(
+    args: &Args,
 ) -> Result<KuasarSandboxer<StratoVirtVMFactory, StratoVirtHooks>> {
     let (config, persist_dir_path) =
-        load_config::<StratoVirtVMConfig>(CONFIG_STRATOVIRT_PATH).await?;
+        load_config::<StratoVirtVMConfig>(args, CONFIG_STRATOVIRT_PATH).await?;
     let hooks = StratoVirtHooks::new(config.hypervisor.clone());
     let mut s = KuasarSandboxer::new(config.sandbox, config.hypervisor, hooks);
     if !persist_dir_path.is_empty() {

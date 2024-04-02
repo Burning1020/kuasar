@@ -19,7 +19,7 @@ use std::{fmt::Debug, os::unix::prelude::AsRawFd, path::Path};
 use anyhow::anyhow;
 use containerd_sandbox::error::Result;
 use futures_util::TryStreamExt;
-use log::{debug, error};
+use log::{debug, error, info, warn};
 use nix::{
     fcntl::OFlag,
     sched::{setns, CloneFlags},
@@ -48,8 +48,9 @@ pub struct Network {
 impl Network {
     pub async fn new(config: NetworkConfig) -> Result<Self> {
         debug!("create network with config: {:?}", config);
+        let sandbox_id = config.sandbox_id.to_string();
         let network = Self::new_from_netns(config).await?;
-        debug!("network: {:?}", &network);
+        info!("network for sandbox {}: {:?}", sandbox_id, &network);
         Ok(network)
     }
 
@@ -64,9 +65,20 @@ impl Network {
         let mut links = handle.link().get().execute();
         let mut intfs = vec![];
         while let Some(msg) = links.try_next().await.map_err(|e| anyhow!(e))? {
-            let network_interface =
-                NetworkInterface::parse_from_message(msg, &config.netns, config.queue, &handle)
-                    .await?;
+            let network_interface = match NetworkInterface::parse_from_message(
+                msg,
+                &config.netns,
+                config.queue,
+                &handle,
+            )
+            .await
+            {
+                Ok(interface) => interface,
+                Err(e) => {
+                    warn!("failed to parse network interface: {}, ignore it", e);
+                    continue;
+                }
+            };
             if let LinkType::Loopback = network_interface.r#type {
                 continue;
             }

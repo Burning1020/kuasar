@@ -23,15 +23,15 @@ bin/vmm-task:
 	@mkdir -p bin && cp vmm/task/target/${ARCH}-unknown-linux-musl/release/vmm-task bin/vmm-task
 
 bin/vmlinux.bin:
-	@bash -x vmm/scripts/kernel/${HYPERVISOR}/build.sh ${KERNEL_VERSION}
+	@bash vmm/scripts/kernel/${HYPERVISOR}/build.sh ${KERNEL_VERSION}
 	@mkdir -p bin && cp vmm/scripts/kernel/${HYPERVISOR}/vmlinux.bin bin/vmlinux.bin && rm vmm/scripts/kernel/${HYPERVISOR}/vmlinux.bin
 
 bin/kuasar.img:
-	@bash -x vmm/scripts/image/${GUESTOS_IMAGE}/build.sh image
+	@bash vmm/scripts/image/${GUESTOS_IMAGE}/build.sh image
 	@mkdir -p bin && cp /tmp/kuasar.img bin/kuasar.img && rm /tmp/kuasar.img
 
 bin/kuasar.initrd:
-	@bash -x vmm/scripts/image/${GUESTOS_IMAGE}/build.sh initrd
+	@bash vmm/scripts/image/${GUESTOS_IMAGE}/build.sh initrd
 	@mkdir -p bin && cp /tmp/kuasar.initrd bin/kuasar.initrd && rm /tmp/kuasar.initrd
 
 bin/wasm-sandboxer:
@@ -42,8 +42,13 @@ bin/quark-sandboxer:
 	@cd quark && cargo build --release
 	@mkdir -p bin && cp quark/target/release/quark-sandboxer bin/quark-sandboxer
 
+bin/runc-sandboxer:
+	@cd runc && cargo build --release
+	@mkdir -p bin && cp runc/target/release/runc-sandboxer bin/runc-sandboxer
+
 wasm: bin/wasm-sandboxer
 quark: bin/quark-sandboxer
+runc: bin/runc-sandboxer
 
 ifeq ($(HYPERVISOR), stratovirt)
 vmm: bin/vmm-sandboxer bin/kuasar.initrd bin/vmlinux.bin
@@ -57,6 +62,7 @@ clean:
 	@cd vmm/task && cargo clean
 	@cd wasm && cargo clean
 	@cd quark && cargo clean
+	@cd runc && cargo clean
 
 install-vmm:
 	@install -d -m 750 ${DEST_DIR}${BIN_DIR}
@@ -86,4 +92,7 @@ install-quark:
 	@install -d -m 750 ${DEST_DIR}${SYSTEMD_SERVICE_DIR}
 	@install -p -m 640 quark/service/kuasar-quark.service ${DEST_DIR}${SYSTEMD_SERVICE_DIR}/kuasar-quark.service
 
-install: all install-vmm install-wasm install-quark
+install-runc:
+	@install -p -m 550 bin/runc-sandboxer ${DEST_DIR}${BIN_DIR}/runc-sandboxer
+
+install: all install-vmm install-wasm install-quark install-runc

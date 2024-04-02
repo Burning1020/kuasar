@@ -15,43 +15,45 @@ limitations under the License.
 */
 
 use std::{
-    convert::TryFrom, os::unix::prelude::ExitStatusExt, path::Path, process::ExitStatus, sync::Arc,
+    convert::TryFrom, io::SeekFrom, os::unix::prelude::ExitStatusExt, path::Path,
+    process::ExitStatus, sync::Arc,
 };
-use std::collections::HashMap;
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 use async_trait::async_trait;
-use containerd_shim::{api::{CreateTaskRequest, ExecProcessRequest, Status}, asynchronous::{
-    console::ConsoleSocket,
-    container::{ContainerFactory, ContainerTemplate, ProcessFactory},
-    monitor::{monitor_subscribe, monitor_unsubscribe},
-    processes::{ProcessLifecycle, ProcessTemplate},
-    util::read_file_to_str,
-}, error::{Error, Result}, io::Stdio, monitor::Topic, other, other_error, protos::{
-    cgroups::metrics::Metrics,
-    protobuf::{CodedInputStream, Message},
-    shim::oci::Options,
-    types::task::ProcessInfo,
-}, util::read_spec, ExitSignal, io_error};
-use containerd_shim::util::mkdir;
-use lazy_static::lazy_static;
+use containerd_shim::{
+    api::{CreateTaskRequest, ExecProcessRequest, Status},
+    asynchronous::{
+        console::ConsoleSocket,
+        container::{ContainerFactory, ContainerTemplate, ProcessFactory},
+        monitor::{monitor_subscribe, monitor_unsubscribe},
+        processes::{ProcessLifecycle, ProcessTemplate},
+        util::read_file_to_str,
+    },
+    error::{Error, Result},
+    io::Stdio,
+    monitor::Topic,
+    other, other_error,
+    protos::{
+        cgroups::metrics::Metrics,
+        protobuf::{CodedInputStream, Message},
+        shim::oci::Options,
+        types::task::ProcessInfo,
+    },
+    util::read_spec,
+    ExitSignal,
+};
 use log::{debug, error};
-use nix::{mount, mount::MsFlags, sys::signalfd::signal::kill, unistd::Pid};
-use nix::fcntl::{OFlag, open};
-use nix::sched::{CloneFlags, setns, unshare};
-use nix::sys::stat::Mode;
-use nix::unistd::{getpid, gettid};
+use nix::{sys::signalfd::signal::kill, unistd::Pid};
 use oci_spec::runtime::{LinuxResources, Process, Spec};
 use runc::{options::GlobalOpts, Runc, Spawner};
 use serde::Deserialize;
 use tokio::{
-    fs::File,
-    io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, BufReader},
+    fs::{remove_file, File},
+    io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncSeekExt, BufReader},
     process::Command,
     sync::Mutex,
 };
-use tokio::task::spawn_blocking;
-use vmm_common::{mount::get_mount_type, storage::Storage, ETC_RESOLV, KUASAR_STATE_DIR, RESOLV_FILENAME, IPC_NAMESPACE, UTS_NAMESPACE, NET_NAMESPACE, SANDBOX_NS_PATH};
+use vmm_common::{mount::get_mount_type, storage::Storage, KUASAR_STATE_DIR};
 
 use crate::{
     device::rescan_pci_bus,
@@ -68,14 +70,6 @@ pub const GROUP_LABELS: [&str; 2] = [
 pub const INIT_PID_FILE: &str = "init.pid";
 
 const STORAGE_ANNOTATION: &str = "io.kuasar.storages";
-
-lazy_static! {
-    static ref CLONE_FLAG_TABLE: HashMap<String, CloneFlags> = HashMap::from([
-    (String::from(NET_NAMESPACE), CloneFlags::CLONE_NEWNET),
-    (String::from(IPC_NAMESPACE), CloneFlags::CLONE_NEWIPC),
-    (String::from(UTS_NAMESPACE), CloneFlags::CLONE_NEWUTS),
-    ]);
-}
 
 pub type ExecProcess = ProcessTemplate<KuasarExecLifecycle>;
 pub type InitProcess = ProcessTemplate<KuasarInitLifecycle>;
@@ -202,22 +196,6 @@ impl KuasarFactory {
         Self { sandbox }
     }
 
-    pub async fn create_sandbox(&self) -> Result<()> {
-        // Setup DNS
-        // bind mount to /etc/resolv.conf
-        let dns_file = Path::new(KUASAR_STATE_DIR).join(RESOLV_FILENAME);
-        mount::mount(
-            Some(&dns_file),
-            ETC_RESOLV,
-            Some("bind"),
-            MsFlags::MS_BIND,
-            None::<&str>,
-        )?;
-        // Setup sandbox namespace
-        setup_sandbox_ns().await?;
-        Ok(())
-    }
-
     async fn do_create(&self, init: &mut InitProcess) -> Result<()> {
         let id = init.id.to_string();
         let stdio = &init.stdio;
@@ -268,77 +246,69 @@ impl KuasarFactory {
 }
 
 // runtime_error will read the OCI runtime logfile retrieving OCI runtime error
-pub async fn runtime_error(bundle: &str, e: runc::error::Error, msg: &str) -> Error {
-    let mut rt_msg = String::new();
-    match File::open(Path::new(bundle).join("log.json")).await {
-        Err(err) => other!("{}: unable to open OCI runtime log file){}", msg, err),
-        Ok(file) => {
-            let mut lines = BufReader::new(file).lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                // Retrieve the last runtime error
-                match serde_json::from_str::<Log>(&line) {
-                    Err(err) => return other!("{}: unable to parse log msg: {}", msg, err),
-                    Ok(log) => {
-                        if log.level == "error" {
-                            rt_msg = log.msg.trim().to_string();
-                        }
-                    }
-                }
-            }
-            if !rt_msg.is_empty() {
-                other!("{}: {}", msg, rt_msg)
+pub async fn runtime_error(bundle: &str, r_err: runc::error::Error, msg: &str) -> Error {
+    match get_last_runtime_error(bundle).await {
+        Err(e) => other!(
+            "{}: unable to retrieve OCI runtime error ({}): {}",
+            msg,
+            e,
+            r_err
+        ),
+        Ok(rt_msg) => {
+            if rt_msg.is_empty() {
+                other!("{}: empty msg in log file: {}", msg, r_err)
             } else {
-                other!("{}: (no OCI runtime error in logfile) {}", msg, e)
+                other!("{}: {}", msg, rt_msg)
             }
         }
     }
 }
 
-async fn setup_sandbox_ns() -> Result<()> {
-    setup_persistent_ns(IPC_NAMESPACE).await?;
-    setup_persistent_ns(UTS_NAMESPACE).await?;
-    Ok(())
-}
+async fn get_last_runtime_error(bundle: &str) -> Result<String> {
+    let log_path = Path::new(bundle).join("log.json");
+    let mut rt_msg = String::new();
+    match File::open(log_path).await {
+        Err(e) => Err(other!("unable to open OCI runtime log file: {}", e)),
+        Ok(file) => {
+            let mut reader = BufReader::new(file);
+            let file_size = reader
+                .seek(SeekFrom::End(0))
+                .await
+                .map_err(other_error!(e, "error seek from start"))?;
 
-async fn setup_persistent_ns(ns_type: &str) -> Result<()> {
-    let clone_type = CLONE_FLAG_TABLE.get(ns_type)
-        .ok_or(other!("bad ns type {}", ns_type))?
-        .clone();
-    mkdir(SANDBOX_NS_PATH, 0o711).await?;
-    let sandbox_ns_path = Path::new(SANDBOX_NS_PATH).join(ns_type);
-    File::create(&sandbox_ns_path).await.map_err(io_error!(e, "failed to create: {}", sandbox_ns_path.display()))?;
+            let mut pre_buffer: Option<Vec<u8>> = None;
+            let mut buffer = Vec::new();
 
-    let ns_type = ns_type.to_string();
-    spawn_blocking(move || {
-        let ns_path = format!("/proc/{}/task/{}/ns/{}", getpid(), gettid(), ns_type);
-        let ns_fd =
-            safe_open_file(ns_path.as_str(), OFlag::O_CLOEXEC, Mode::empty()).unwrap();
-
-        unshare(clone_type).expect("failed to do unshare");
-
-        mount::mount(
-            Some(ns_path.as_str()),
-            &sandbox_ns_path,
-            Some("none"),
-            MsFlags::MS_BIND,
-            None::<&str>,
-        ).expect("failed to mount sandbox ns");
-
-        setns(ns_fd.as_raw_fd(), clone_type).expect("failed to set ns");
-    })
-        .await
-        .map_err(|e| other!("failed to wait for the ns: {}", e))?;
-    Ok(())
-}
-
-pub fn safe_open_file<P: ?Sized + nix::NixPath>(
-    path: &P,
-    oflag: OFlag,
-    mode: Mode,
-) -> std::result::Result<OwnedFd, nix::Error> {
-    let fd = open(path, oflag, mode)?;
-    // SAFETY: contruct a OwnedFd from RawFd, close fd when OwnedFd drop
-    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+            for offset in (0..file_size).rev() {
+                if offset == 0 {
+                    break;
+                }
+                reader
+                    .seek(SeekFrom::Start(offset))
+                    .await
+                    .map_err(other_error!(e, "error seek"))?;
+                let result = reader
+                    .read_until(b'\n', &mut buffer)
+                    .await
+                    .map_err(other_error!(e, "reading from cursor fail"))?;
+                if result == 1 && pre_buffer.is_some() {
+                    let line = String::from_utf8_lossy(&pre_buffer.unwrap()).into_owned();
+                    match serde_json::from_str::<Log>(&line) {
+                        Err(e) => return Err(other!("unable to parse log msg({}): {}", line, e)),
+                        Ok(log) => {
+                            if log.level == "error" {
+                                rt_msg = log.msg.trim().to_string();
+                                break;
+                            }
+                        }
+                    }
+                }
+                pre_buffer = Some(buffer.clone());
+                buffer.clear();
+            }
+            Ok(rt_msg)
+        }
+    }
 }
 
 #[async_trait]
@@ -368,6 +338,7 @@ impl ProcessFactory<ExecProcess> for KuasarExecFactory {
                 spec: p,
                 exit_signal: Default::default(),
             }),
+            stdin: Arc::new(Mutex::new(None)),
         })
     }
 }
@@ -375,10 +346,9 @@ impl ProcessFactory<ExecProcess> for KuasarExecFactory {
 #[async_trait]
 impl ProcessLifecycle<InitProcess> for KuasarInitLifecycle {
     async fn start(&self, p: &mut InitProcess) -> containerd_shim::Result<()> {
-        self.runtime
-            .start(p.id.as_str())
-            .await
-            .map_err(other_error!(e, "failed start"))?;
+        if let Err(e) = self.runtime.start(p.id.as_str()).await {
+            return Err(runtime_error(&p.lifecycle.bundle, e, "OCI runtime start failed").await);
+        }
         p.state = Status::RUNNING;
         Ok(())
     }
@@ -389,31 +359,37 @@ impl ProcessLifecycle<InitProcess> for KuasarInitLifecycle {
         signal: u32,
         all: bool,
     ) -> containerd_shim::Result<()> {
-        self.runtime
+        if let Err(r_err) = self
+            .runtime
             .kill(
                 p.id.as_str(),
                 signal,
                 Some(&runc::options::KillOpts { all }),
             )
             .await
-            .map_err(|e| check_kill_error(e.to_string()))
+        {
+            let e = runtime_error(&p.lifecycle.bundle, r_err, "OCI runtime kill failed").await;
+
+            return Err(check_kill_error(e.to_string()));
+        }
+        Ok(())
     }
 
     async fn delete(&self, p: &mut InitProcess) -> containerd_shim::Result<()> {
-        self.runtime
+        if let Err(e) = self
+            .runtime
             .delete(
                 p.id.as_str(),
                 Some(&runc::options::DeleteOpts { force: true }),
             )
             .await
-            .or_else(|e| {
-                if !e.to_string().to_lowercase().contains("does not exist") {
-                    Err(e)
-                } else {
-                    Ok(())
-                }
-            })
-            .map_err(other_error!(e, "failed delete"))?;
+        {
+            if !e.to_string().to_lowercase().contains("does not exist") {
+                return Err(
+                    runtime_error(&p.lifecycle.bundle, e, "OCI runtime delete failed").await,
+                );
+            }
+        }
         self.exit_signal.signal();
         Ok(())
     }
@@ -486,7 +462,8 @@ impl KuasarInitLifecycle {
 impl ProcessLifecycle<ExecProcess> for KuasarExecLifecycle {
     async fn start(&self, p: &mut ExecProcess) -> containerd_shim::Result<()> {
         rescan_pci_bus().await?;
-        let pid_path = Path::new(self.bundle.as_str()).join(format!("{}.pid", &p.id));
+        let bundle = self.bundle.to_string();
+        let pid_path = Path::new(&bundle).join(format!("{}.pid", &p.id));
         let mut exec_opts = runc::options::ExecOpts {
             io: None,
             pid_file: Some(pid_path.to_owned()),
@@ -511,7 +488,7 @@ impl ProcessLifecycle<ExecProcess> for KuasarExecLifecycle {
             if let Some(s) = socket {
                 s.clean().await;
             }
-            return Err(other!("failed to start runc exec: {}", e));
+            return Err(runtime_error(&bundle, e, "OCI runtime exec failed").await);
         }
         copy_io_or_console(p, socket, pio, p.lifecycle.exit_signal.clone()).await?;
         let pid = read_file_to_str(pid_path).await?.parse::<i32>()?;
@@ -542,8 +519,10 @@ impl ProcessLifecycle<ExecProcess> for KuasarExecLifecycle {
         }
     }
 
-    async fn delete(&self, _p: &mut ExecProcess) -> containerd_shim::Result<()> {
+    async fn delete(&self, p: &mut ExecProcess) -> Result<()> {
         self.exit_signal.signal();
+        let exec_pid_path = Path::new(self.bundle.as_str()).join(format!("{}.pid", p.id));
+        remove_file(exec_pid_path).await.unwrap_or_default();
         Ok(())
     }
 
@@ -681,5 +660,73 @@ pub fn check_kill_error(emsg: String) -> Error {
         Error::NotFoundError("no such container".to_string())
     } else {
         other!("unknown error after kill {}", emsg)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use containerd_shim::util::{mkdir, write_str_to_file};
+    use tokio::fs::remove_dir_all;
+
+    use crate::container::runtime_error;
+
+    #[tokio::test]
+    async fn test_runtime_error_with_logfile() {
+        let empty_err = runc::error::Error::NotFound;
+        let log_json = "\
+        {\"level\":\"info\",\"msg\":\"hello word\",\"time\":\"2022-11-25\"}\n\
+        {\"level\":\"error\",\"msg\":\"failed error\",\"time\":\"2022-11-26\"}\n\
+        {\"level\":\"error\",\"msg\":\"panic\",\"time\":\"2022-11-27\"}\n\
+        {\"level\":\"info\",\"msg\":\"program exit\",\"time\":\"2024-1-24\"}\n\
+        ";
+        let test_dir = "/tmp/kuasar-test_runtime_error_with_logfile";
+        let _ = mkdir(test_dir, 0o711).await;
+        let test_log_file = Path::new(test_dir).join("log.json");
+        write_str_to_file(test_log_file.as_path(), log_json)
+            .await
+            .expect("write log json should not be error");
+
+        let expected_msg = "panic";
+        let actual_err = runtime_error(
+            test_dir,
+            empty_err,
+            "test_runtime_error_with_logfile failed",
+        )
+        .await;
+        remove_dir_all(test_dir).await.expect("remove test dir");
+        assert!(
+            actual_err.to_string().contains(expected_msg),
+            "actual error \"{}\" should contains \"{}\"",
+            actual_err.to_string(),
+            expected_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn test_runtime_error_without_logfile() {
+        let empty_err = runc::error::Error::NotFound;
+        let test_dir = "/tmp/kuasar-test_runtime_error_without_logfile";
+        let _ = remove_dir_all(test_dir).await;
+        assert!(
+            !Path::new(test_dir).exists(),
+            "{} should not exist",
+            test_dir
+        );
+
+        let expected_msg = "Unable to locate the runc";
+        let actual_err = runtime_error(
+            test_dir,
+            empty_err,
+            "test_runtime_error_without_logfile failed",
+        )
+        .await;
+        assert!(
+            actual_err.to_string().contains(expected_msg),
+            "actual error \"{}\" should contains \"{}\"",
+            actual_err.to_string(),
+            expected_msg
+        );
     }
 }

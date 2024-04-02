@@ -241,7 +241,7 @@ where
             network.attach_to(&mut sandbox).await?;
         }
 
-        // setup Sandboxfiles
+        // setup sandbox files: hosts, hostname and resolv.conf for guest
         sandbox.setup_sandbox_files().await?;
         self.hooks.post_create(&mut sandbox).await?;
         sandbox.dump().await?;
@@ -473,6 +473,7 @@ where
 
     async fn stop(&mut self, force: bool) -> Result<()> {
         match self.status {
+            // If sandbox is created but not running, no need to stop.
             SandboxStatus::Created => {
                 return Ok(());
             }
@@ -543,7 +544,7 @@ where
     pub(crate) async fn sync_clock(&self) {
         let client_guard = self.client.lock().await;
         if let Some(client) = &*client_guard {
-            client_sync_clock(client).await;
+            client_sync_clock(client, self.id.as_str()).await;
         }
     }
 
@@ -702,16 +703,22 @@ mod tests {
         #[test]
         fn test_parse_non_empty_dns_option() {
             let dns_test = DnsConfig {
-                servers: vec!["8.8.8.8", "server.google.com"].into_iter().map(String::from).collect(),
+                servers: vec!["8.8.8.8", "server.google.com"]
+                    .into_iter()
+                    .map(String::from)
+                    .collect(),
                 searches: vec![
-                "server0.google.com",
-                "server1.google.com",
-                "server2.google.com",
-                "server3.google.com",
-                "server4.google.com",
-                "server5.google.com",
-                "server6.google.com",
-                ].into_iter().map(String::from).collect(),
+                    "server0.google.com",
+                    "server1.google.com",
+                    "server2.google.com",
+                    "server3.google.com",
+                    "server4.google.com",
+                    "server5.google.com",
+                    "server6.google.com",
+                ]
+                .into_iter()
+                .map(String::from)
+                .collect(),
                 options: vec!["timeout:1"].into_iter().map(String::from).collect(),
             };
             let expected_content = "search server0.google.com server1.google.com server2.google.com server3.google.com server4.google.com server5.google.com server6.google.com

@@ -269,14 +269,14 @@ impl NetworkInterface {
         // find the pci device for unknown type interface, maybe it is a physical interface.
         if let LinkType::Unkonwn = intf.r#type {
             // only search those with ip addresses
-            if intf.ip_addresses.len() > 0 {
+            if !intf.ip_addresses.is_empty() {
                 let if_name = intf.name.to_string();
-                let bdf = if netns.len() > 0 {
-                    run_in_new_netns(netns, move || get_bdf_for_eth(&*if_name)).await??
+                let bdf = if !netns.is_empty() {
+                    run_in_new_netns(netns, move || get_bdf_for_eth(&if_name)).await??
                 } else {
-                    get_bdf_for_eth(&*if_name)?
+                    get_bdf_for_eth(&if_name)?
                 };
-                let driver = get_pci_driver(&*bdf).await?;
+                let driver = get_pci_driver(&bdf).await?;
                 intf.r#type = LinkType::Physical(bdf, driver);
             }
         }
@@ -557,10 +557,11 @@ fn create_tap_device(tap_name: &str, mut queue: u32) -> Result<Vec<OwnedFd>> {
     Ok(fds)
 }
 
-#[allow(dead_code)]
 async fn get_pci_driver(bdf: &str) -> Result<String> {
     let driver_path = format!("/sys/bus/pci/devices/{}/driver", bdf);
-    let driver_dest = tokio::fs::read_link(driver_path).await?;
+    let driver_dest = tokio::fs::read_link(&driver_path)
+        .await
+        .map_err(|e| anyhow!("fail to readlink of {} : {}", driver_path, e))?;
     let file_name = driver_dest.file_name().ok_or(anyhow!(
         "failed to get file name from driver path {:?}",
         driver_dest

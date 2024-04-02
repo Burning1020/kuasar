@@ -18,10 +18,15 @@ use std::path::Path;
 
 use anyhow::anyhow;
 use async_trait::async_trait;
-use containerd_sandbox::error::Error;
-use containerd_sandbox::spec::{JsonSpec, Mount};
+use containerd_sandbox::{
+    error::Error,
+    spec::{JsonSpec, Mount},
+};
 use path_clean::clean;
-use vmm_common::{ETC_HOSTNAME, ETC_HOSTS, ETC_RESOLV, HOSTNAME_FILENAME, HOSTS_FILENAME, IPC_NAMESPACE, KUASAR_STATE_DIR, RESOLV_FILENAME, SANDBOX_NS_PATH, SHARED_DIR_SUFFIX, UTS_NAMESPACE};
+use vmm_common::{
+    ETC_HOSTNAME, ETC_HOSTS, ETC_RESOLV, HOSTNAME_FILENAME, HOSTS_FILENAME, KUASAR_STATE_DIR,
+    RESOLV_FILENAME,
+};
 
 use crate::{
     container::handler::Handler, sandbox::KuasarSandbox, utils::write_file_atomic, vm::VM,
@@ -50,9 +55,7 @@ where
         &self,
         sandbox: &mut KuasarSandbox<T>,
     ) -> containerd_sandbox::error::Result<()> {
-        let shared_path =  format!("{}/{}", sandbox.base_dir, SHARED_DIR_SUFFIX);
-        let hostname = sandbox.data.config.as_ref()
-            .map(|c| c.hostname.to_string()).unwrap_or_default();
+        let shared_path = sandbox.get_sandbox_shared_path();
         let container = sandbox.container_mut(&self.container_id)?;
         let spec = container
             .data
@@ -68,20 +71,6 @@ where
         }
         // Update sandbox files mounts for container
         container_mounts(&shared_path, spec);
-
-        // Update ipc and uts namespace for container
-        if let Some(linux) = spec.linux.as_mut() {
-            for ns in linux.namespaces.iter_mut() {
-                if ns.r#type == IPC_NAMESPACE || ns.r#type == UTS_NAMESPACE {
-                    ns.path = format!("{}/{}", SANDBOX_NS_PATH, ns.r#type);
-                    continue;
-                }
-            }
-        }
-
-        // Update container hostname to sandbox hostname
-        spec.hostname = hostname;
-
         let spec_str = serde_json::to_string(spec)
             .map_err(|e| anyhow!("failed to parse spec in sandbox, {}", e))?;
         let config_path = format!("{}/{}", container.data.bundle, CONFIG_FILE_NAME);
@@ -94,8 +83,9 @@ where
         sandbox: &mut KuasarSandbox<T>,
     ) -> containerd_sandbox::error::Result<()> {
         let bundle = format!(
-            "{}/{}/{}",
-            sandbox.base_dir, SHARED_DIR_SUFFIX, self.container_id
+            "{}/{}",
+            sandbox.get_sandbox_shared_path(),
+            self.container_id
         );
         tokio::fs::remove_dir_all(&*bundle)
             .await
@@ -123,7 +113,10 @@ fn container_mounts(shared_path: &str, spec: &mut JsonSpec) {
                     destination: dst.to_string(),
                     r#type: "bind".to_string(),
                     source: format!("{}/{}", KUASAR_STATE_DIR, filename),
-                    options: vec!["rbind", "rprivate", rw_option].into_iter().map(String::from).collect(),
+                    options: vec!["rbind", "rprivate", rw_option]
+                        .into_iter()
+                        .map(String::from)
+                        .collect(),
                 });
             }
         }
@@ -135,11 +128,10 @@ fn container_mounts(shared_path: &str, spec: &mut JsonSpec) {
     spec.mounts.append(&mut extra_mounts);
 }
 
-
 fn is_in_cri_mounts(dst: &str, mounts: &Vec<Mount>) -> bool {
     for mount in mounts {
         if clean(&mount.destination) == clean(dst) {
-            return true
+            return true;
         }
     }
     false
@@ -148,9 +140,11 @@ fn is_in_cri_mounts(dst: &str, mounts: &Vec<Mount>) -> bool {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+
     use containerd_sandbox::spec::{JsonSpec, Mount, Root};
     use containerd_shim::util::write_str_to_file;
     use temp_dir::TempDir;
+
     use crate::container::handler::spec::{container_mounts, is_in_cri_mounts};
 
     fn generate_cri_mounts() -> Vec<Mount> {
@@ -214,11 +208,17 @@ mod tests {
 
         let tmp_path = TempDir::new().unwrap();
         let shared_path = tmp_path.path().to_str().unwrap();
-        write_str_to_file(tmp_path.child("hostname"), "kuasar-deno-001").await.unwrap();
+        write_str_to_file(tmp_path.child("hostname"), "kuasar-deno-001")
+            .await
+            .unwrap();
         container_mounts(shared_path, &mut spec);
         assert_eq!(spec.mounts.len(), 1);
         assert!(spec.mounts[0].options.contains(&"rw".to_string()));
-        let parent_path = Path::new(&spec.mounts[0].source).parent().unwrap().to_str().unwrap();
+        let parent_path = Path::new(&spec.mounts[0].source)
+            .parent()
+            .unwrap()
+            .to_str()
+            .unwrap();
         assert_eq!(parent_path, "/run/kuasar/state");
     }
 
@@ -235,7 +235,9 @@ mod tests {
 
         let tmp_path = TempDir::new().unwrap();
         let shared_path = tmp_path.path().to_str().unwrap();
-        write_str_to_file(tmp_path.child("hostname"), "kuasar-deno-001").await.unwrap();
+        write_str_to_file(tmp_path.child("hostname"), "kuasar-deno-001")
+            .await
+            .unwrap();
         container_mounts(shared_path, &mut spec);
         assert_eq!(spec.mounts.len(), 1);
         assert!(spec.mounts[0].options.contains(&"ro".to_string()));
@@ -258,4 +260,3 @@ mod tests {
         assert_eq!(cri_mount[0].options, spec.mounts[0].options);
     }
 }
-
