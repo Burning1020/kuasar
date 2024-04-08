@@ -81,7 +81,7 @@ docker)
 		-v "${REPO_DIR}":/kuasar \
 		-v "${ROOTFS_DIR}":"/tmp/kuasar-rootfs" \
 		${IMAGE_NAME} \
-		bash /kuasar/vmm/scripts/image/${GUESTOS_IMAGE}/build_rootfs.sh
+		bash ls -al /kuasar/vmm/scripts/image/${GUESTOS_IMAGE}
 	fn_check_result $? "docker run ${container_name} return error!"
 	;;
 isulad)
