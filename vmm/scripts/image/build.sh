@@ -73,6 +73,8 @@ containerd)
 	fn_check_result $? "ctr run ${container_name} return error!"
 	;;
 docker)
+  set -x
+  ls -al ${REPO_DIR}/vmm/scripts/image/centos
 	docker run \
 		--rm \
 		--env http_proxy=${http_proxy} \
@@ -81,7 +83,7 @@ docker)
 		-v "${REPO_DIR}":/kuasar \
 		-v "${ROOTFS_DIR}":"/tmp/kuasar-rootfs" \
 		${IMAGE_NAME} \
-		bash ls -al /kuasar/vmm/scripts/image/${GUESTOS_IMAGE}
+		bash ls -al /kuasar/vmm/scripts/image/
 	fn_check_result $? "docker run ${container_name} return error!"
 	;;
 isulad)
