@@ -74,6 +74,9 @@ containerd)
 	;;
 docker)
   set -x
+  ls -al ${REPO_DIR}/
+  ls -al ${REPO_DIR}/vmm/
+  ls -al ${REPO_DIR}/vmm/scripts/
   ls -al ${REPO_DIR}/vmm/scripts/image/centos
 	docker run \
 		--rm \
@@ -83,7 +86,7 @@ docker)
 		-v "${REPO_DIR}":/kuasar \
 		-v "${ROOTFS_DIR}":"/tmp/kuasar-rootfs" \
 		${IMAGE_NAME} \
-		bash ls -al /kuasar/vmm/scripts/image/
+		bash -x ls -al /kuasar/vmm/scripts/image/
 	fn_check_result $? "docker run ${container_name} return error!"
 	;;
 isulad)
