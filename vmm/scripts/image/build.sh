@@ -14,6 +14,7 @@
 # limitations under the License.
 
 exit_flag=0
+echo $1 $2
 export GUESTOS_IMAGE=${2:-"centos"}
 export IMAGE_NAME=${IMAGE_NAME:-"centos:7"}
 export ROOTFS_DIR=${ROOTFS_DIR:-"/tmp/kuasar-rootfs"}
@@ -83,7 +84,7 @@ docker)
 		-v "${REPO_DIR}":/kuasar \
 		-v "${ROOTFS_DIR}":"/tmp/kuasar-rootfs" \
 		${IMAGE_NAME} \
-		bash -x sudo ls -al /kuasar /kuasar/kuasar/vmm/ /kuasar/vmm/scripts/image/ /kuasar/vmm/scripts/image/${GUESTOS_IMAGE}/build_rootfs.sh
+		bash -x ls -al /kuasar /kuasar/kuasar/vmm/ /kuasar/vmm/scripts/image/
 	fn_check_result $? "docker run ${container_name} return error!"
 	;;
 isulad)

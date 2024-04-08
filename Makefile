@@ -29,7 +29,7 @@ bin/vmlinux.bin:
 	@mkdir -p bin && cp vmm/scripts/kernel/${HYPERVISOR}/vmlinux.bin bin/vmlinux.bin && rm vmm/scripts/kernel/${HYPERVISOR}/vmlinux.bin
 
 bin/kuasar.img:
-	@bash vmm/scripts/image/build.sh image ${GUESTOS_IMAGE}
+	@bash -x vmm/scripts/image/build.sh image ${GUESTOS_IMAGE}
 	@mkdir -p bin && cp /tmp/kuasar.img bin/kuasar.img && rm /tmp/kuasar.img
 
 bin/kuasar.initrd:
