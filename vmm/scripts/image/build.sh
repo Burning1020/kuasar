@@ -74,10 +74,10 @@ containerd)
 	;;
 docker)
   set -x
-  ls -al ${REPO_DIR}/
-  ls -al ${REPO_DIR}/vmm/
-  ls -al ${REPO_DIR}/vmm/scripts/
-  ls -al ${REPO_DIR}/vmm/scripts/image/centos
+  ls -al ${REPO_DIR}/kuasar
+  ls -al ${REPO_DIR}/kuasar/vmm/
+  ls -al ${REPO_DIR}/kuasar/vmm/scripts/
+  ls -al ${REPO_DIR}/kuasar/vmm/scripts/image/centos
 	docker run \
 		--rm \
 		--env http_proxy=${http_proxy} \
@@ -86,7 +86,7 @@ docker)
 		-v "${REPO_DIR}":/kuasar \
 		-v "${ROOTFS_DIR}":"/tmp/kuasar-rootfs" \
 		${IMAGE_NAME} \
-		bash -x ls -al /kuasar/vmm/scripts/image/
+		bash -x ls -al /kuasar
 	fn_check_result $? "docker run ${container_name} return error!"
 	;;
 isulad)
