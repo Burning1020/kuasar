@@ -73,6 +73,8 @@ containerd)
 	fn_check_result $? "ctr run ${container_name} return error!"
 	;;
 docker)
+  set -x
+  ls -al ${REPO_DIR}/kuasar/vmm/scripts/image/${GUESTOS_IMAGE}
 	docker run \
 		--rm \
 		--env http_proxy=${http_proxy} \
@@ -81,7 +83,7 @@ docker)
 		-v "${REPO_DIR}":/kuasar \
 		-v "${ROOTFS_DIR}":"/tmp/kuasar-rootfs" \
 		${IMAGE_NAME} \
-		bash /kuasar/vmm/scripts/image/${GUESTOS_IMAGE}/build_rootfs.sh
+		bash -x sudo ls -al /kuasar /kuasar/kuasar/vmm/ /kuasar/vmm/scripts/image/ /kuasar/vmm/scripts/image/${GUESTOS_IMAGE}/build_rootfs.sh
 	fn_check_result $? "docker run ${container_name} return error!"
 	;;
 isulad)
