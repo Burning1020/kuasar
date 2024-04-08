@@ -114,15 +114,16 @@ install_and_copy_rpm() {
                 yum install -y $rpm >/dev/null 2>&1
                 if [ $? -ne 0 ]; then
                     echo "Can not install $rpm by yum"
-                    exit 1
+                    continue
                 fi
+                rpm -ql $rpm >/dev/null 2>&1 || continue
             fi
             array=($(rpm -ql $rpm | grep -v "share" | grep -v ".build-id"))
             for file in ${array[@]}; do
                 source=$file
                 dts_file=${rootfs_dir}$file
                 dts_folder=${dts_file%/*}
-                if [ ! -d "$dts_folder" ]; then
+                if [ ! -d "$dts_folder" ] && [ ! -L "$dts_folder" ]; then
                     mkdir -p $dts_folder
                 fi
                 cp -r -f -d $source $dts_folder
