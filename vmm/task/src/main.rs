@@ -39,7 +39,7 @@ use nix::{
     unistd::{fork, getpid, pause, pipe, ForkResult, Pid},
 };
 use signal_hook_tokio::Signals;
-use tokio::fs::File;
+use tokio::{fs::File, sync::mpsc::channel};
 use vmm_common::{
     api::sandbox_ttrpc::create_sandbox_service, mount::mount, ETC_RESOLV, HOSTNAME_FILENAME,
     IPC_NAMESPACE, KUASAR_STATE_DIR, PID_NAMESPACE, RESOLV_FILENAME, SANDBOX_NS_PATH,
@@ -67,6 +67,8 @@ mod stream;
 mod task;
 mod util;
 mod vsock;
+
+const NAMESPACE: &str = "k8s.io";
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct StaticMount {
@@ -364,10 +366,11 @@ async fn mount_static_mounts(mounts: Vec<StaticMount>) -> Result<()> {
 // create_ttrpc_server will create all the ttrpc service and register them to a server that
 // bind to vsock 1024 port.
 async fn create_ttrpc_server() -> anyhow::Result<Server> {
-    let task = create_task_service().await?;
+    let (tx, rx) = channel(128);
+    let task = create_task_service(tx).await?;
     let task_service = create_task(Arc::new(Box::new(task)));
 
-    let sandbox = SandboxService::new()?;
+    let sandbox = SandboxService::new(rx)?;
     sandbox.handle_localhost().await?;
     let sandbox_service = create_sandbox_service(Arc::new(Box::new(sandbox)));
 
