@@ -1,0 +1,204 @@
+Subject: [PATCH] add channel to get send result
+---
+Index: src/asynchronous/client.rs
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/asynchronous/client.rs b/src/asynchronous/client.rs
+--- a/src/asynchronous/client.rs	(revision b8646cf1a26f654354f5d753828dd5c26b6b4664)
++++ b/src/asynchronous/client.rs	(revision 2deaabde403f51397a4237c9a6aa904306f67d42)
+@@ -27,6 +27,8 @@
+ };
+ use crate::r#async::utils;
+ 
++use super::stream::SendingMessage;
++
+ /// A ttrpc Client (async).
+ #[derive(Clone)]
+ pub struct Client {
+@@ -78,7 +80,7 @@
+         self.streams.lock().unwrap().insert(stream_id, tx);
+ 
+         self.req_tx
+-            .send(msg)
++            .send(SendingMessage::new(msg))
+             .await
+             .map_err(|e| Error::Others(format!("Send packet to sender error {:?}", e)))?;
+ 
+@@ -131,7 +133,7 @@
+         // TODO: check return
+         self.streams.lock().unwrap().insert(stream_id, tx);
+         self.req_tx
+-            .send(msg)
++            .send(SendingMessage::new(msg))
+             .await
+             .map_err(|e| Error::Others(format!("Send packet to sender error {:?}", e)))?;
+ 
+@@ -196,7 +198,7 @@
+ 
+ #[async_trait]
+ impl WriterDelegate for ClientWriter {
+-    async fn recv(&mut self) -> Option<GenMessage> {
++    async fn recv(&mut self) -> Option<SendingMessage> {
+         self.rx.recv().await
+     }
+ 
+Index: src/asynchronous/connection.rs
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/asynchronous/connection.rs b/src/asynchronous/connection.rs
+--- a/src/asynchronous/connection.rs	(revision b8646cf1a26f654354f5d753828dd5c26b6b4664)
++++ b/src/asynchronous/connection.rs	(revision 2deaabde403f51397a4237c9a6aa904306f67d42)
+@@ -16,6 +16,8 @@
+ use crate::error::Error;
+ use crate::proto::GenMessage;
+ 
++use super::stream::SendingMessage;
++
+ pub trait Builder {
+     type Reader;
+     type Writer;
+@@ -25,7 +27,7 @@
+ 
+ #[async_trait]
+ pub trait WriterDelegate {
+-    async fn recv(&mut self) -> Option<GenMessage>;
++    async fn recv(&mut self) -> Option<SendingMessage>;
+     async fn disconnect(&self, msg: &GenMessage, e: Error);
+     async fn exit(&self);
+ }
+@@ -57,12 +59,14 @@
+         let (reader_delegate, mut writer_delegate) = builder.build();
+ 
+         let writer_task = tokio::spawn(async move {
+-            while let Some(msg) = writer_delegate.recv().await {
+-                trace!("write message: {:?}", msg);
+-                if let Err(e) = msg.write_to(&mut writer).await {
++            while let Some(mut sending_msg) = writer_delegate.recv().await {
++                trace!("write message: {:?}", sending_msg.msg);
++                if let Err(e) = sending_msg.msg.write_to(&mut writer).await {
+                     error!("write_message got error: {:?}", e);
+-                    writer_delegate.disconnect(&msg, e).await;
++                    sending_msg.send_result(Err(e.clone()));
++                    writer_delegate.disconnect(&sending_msg.msg, e).await;
+                 }
++                sending_msg.send_result(Ok(()));
+             }
+             writer_delegate.exit().await;
+             trace!("Writer task exit.");
+Index: src/asynchronous/server.rs
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/asynchronous/server.rs b/src/asynchronous/server.rs
+--- a/src/asynchronous/server.rs	(revision b8646cf1a26f654354f5d753828dd5c26b6b4664)
++++ b/src/asynchronous/server.rs	(revision 2deaabde403f51397a4237c9a6aa904306f67d42)
+@@ -30,7 +30,7 @@
+ #[cfg(target_os = "linux")]
+ use tokio_vsock::VsockListener;
+ 
+-use crate::asynchronous::unix_incoming::UnixIncoming;
++use crate::asynchronous::{stream::SendingMessage, unix_incoming::UnixIncoming};
+ use crate::common::{self, Domain};
+ use crate::context;
+ use crate::error::{get_status, Error, Result};
+@@ -329,7 +329,7 @@
+ 
+ #[async_trait]
+ impl WriterDelegate for ServerWriter {
+-    async fn recv(&mut self) -> Option<GenMessage> {
++    async fn recv(&mut self) -> Option<SendingMessage> {
+         self.rx.recv().await
+     }
+     async fn disconnect(&self, _msg: &GenMessage, _: Error) {}
+@@ -437,7 +437,7 @@
+                         };
+ 
+                         self.tx
+-                            .send(msg)
++                            .send(SendingMessage::new(msg))
+                             .await
+                             .map_err(err_to_others_err!(e, "Send packet to sender error "))
+                             .ok();
+@@ -644,7 +644,7 @@
+             header: MessageHeader::new_response(stream_id, payload.len() as u32),
+             payload,
+         };
+-        tx.send(msg)
++        tx.send(SendingMessage::new(msg))
+             .await
+             .map_err(err_to_others_err!(e, "Send packet to sender error "))
+     }
+Index: src/asynchronous/stream.rs
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/asynchronous/stream.rs b/src/asynchronous/stream.rs
+--- a/src/asynchronous/stream.rs	(revision b8646cf1a26f654354f5d753828dd5c26b6b4664)
++++ b/src/asynchronous/stream.rs	(revision 2deaabde403f51397a4237c9a6aa904306f67d42)
+@@ -17,12 +17,42 @@
+     MESSAGE_TYPE_DATA, MESSAGE_TYPE_RESPONSE,
+ };
+ 
+-pub type MessageSender = mpsc::Sender<GenMessage>;
+-pub type MessageReceiver = mpsc::Receiver<GenMessage>;
++pub type MessageSender = mpsc::Sender<SendingMessage>;
++pub type MessageReceiver = mpsc::Receiver<SendingMessage>;
+ 
+ pub type ResultSender = mpsc::Sender<Result<GenMessage>>;
+ pub type ResultReceiver = mpsc::Receiver<Result<GenMessage>>;
+ 
++#[derive(Debug)]
++pub struct SendingMessage {
++    pub msg: GenMessage,
++    pub result_chan: Option<tokio::sync::oneshot::Sender<Result<()>>>,
++}
++
++impl SendingMessage {
++    pub fn new(msg: GenMessage) -> Self {
++        Self {
++            msg,
++            result_chan: None,
++        }
++    }
++    pub fn new_with_result(
++        msg: GenMessage,
++        result_chan: tokio::sync::oneshot::Sender<Result<()>>,
++    ) -> Self {
++        Self {
++            msg,
++            result_chan: Some(result_chan),
++        }
++    }
++
++    pub fn send_result(&mut self, result: Result<()>) {
++        if let Some(result_ch) = self.result_chan.take() {
++            result_ch.send(result).unwrap_or_default();
++        }
++    }
++}
++
+ #[derive(Debug)]
+ pub struct ClientStream<Q, P> {
+     tx: CSSender<Q>,
+@@ -317,9 +347,13 @@
+ }
+ 
+ async fn _send(tx: &MessageSender, msg: GenMessage) -> Result<()> {
+-    tx.send(msg)
++    let (res_tx, res_rx) = tokio::sync::oneshot::channel();
++    tx.send(SendingMessage::new_with_result(msg, res_tx))
+         .await
+-        .map_err(|e| Error::Others(format!("Send data packet to sender error {:?}", e)))
++        .map_err(|e| Error::Others(format!("Send data packet to sender error {:?}", e)))?;
++    res_rx
++        .await
++        .map_err(|e| Error::Others(format!("Failed to wait send result {:?}", e)))?
+ }
+ 
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]

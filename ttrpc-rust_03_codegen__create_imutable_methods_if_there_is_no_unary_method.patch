@@ -1,0 +1,53 @@
+Subject: [PATCH] codegen: create imutable methods if there is no unary method
+---
+Index: compiler/src/codegen.rs
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/compiler/src/codegen.rs b/compiler/src/codegen.rs
+--- a/compiler/src/codegen.rs	(revision 2deaabde403f51397a4237c9a6aa904306f67d42)
++++ b/compiler/src/codegen.rs	(revision 080594d644e4bf2dce49f694646c91571c6f0339)
+@@ -487,6 +487,12 @@
+             .any(|method| !matches!(method.method_type().0, MethodType::Unary))
+     }
+ 
++    fn has_unary_method(&self) -> bool {
++        self.methods
++            .iter()
++            .any(|method| matches!(method.method_type().0, MethodType::Unary))
++    }
++
+     fn write_client(&self, w: &mut CodeWriter) {
+         if async_on(self.customize, "client") {
+             self.write_async_client(w)
+@@ -589,9 +595,14 @@
+         );
+ 
+         let has_stream_method = self.has_stream_method();
++        let has_unary_method = self.has_unary_method();
+         w.pub_fn(&s, |w| {
+             w.write_line("let mut ret = HashMap::new();");
+-            w.write_line("let mut methods = HashMap::new();");
++            if has_unary_method {
++                w.write_line("let mut methods = HashMap::new();");
++            } else {
++                w.write_line("let methods = HashMap::new();");
++            }
+             if has_stream_method {
+                 w.write_line("let mut streams = HashMap::new();");
+             } else {
+Index: ttrpc-codegen/Cargo.toml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/ttrpc-codegen/Cargo.toml b/ttrpc-codegen/Cargo.toml
+--- a/ttrpc-codegen/Cargo.toml	(revision 2deaabde403f51397a4237c9a6aa904306f67d42)
++++ b/ttrpc-codegen/Cargo.toml	(revision 080594d644e4bf2dce49f694646c91571c6f0339)
+@@ -16,4 +16,4 @@
+ protobuf-support = "3.1.0"
+ protobuf = { version = "2.27.1" }
+ protobuf-codegen = "3.1.0"
+-ttrpc-compiler = "0.6.1"
++ttrpc-compiler = { path = "../ttrpc-compiler" }
