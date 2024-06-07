@@ -666,6 +666,13 @@ where
                                 }
                             }
                             Err(err) => {
+                                // if sandbox was closed, will get error Socket("early eof"),
+                                // so we should handle errors except this unexpected EOF error.
+                                if let ttrpc::error::Error::Socket(s) = &err {
+                                    if s.contains("early eof") {
+                                        break;
+                                    }
+                                }
                                 error!("failed to get oom event error {:?}", err);
                                 break;
                             }
