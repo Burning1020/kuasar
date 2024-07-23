@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Build vm image
-        run: sudo make bin/kuasar.img RUNTIME=docker
+        run: sudo make bin/kuasar.img RUNTIME=docker IMAGE_NAME=registry.fedoraproject.org/fedora:40
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
